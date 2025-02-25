@@ -218,11 +218,8 @@ async function translateWithAnthropic(text, settings) {
     console.log('Anthropic リクエストヘッダー:', JSON.stringify(headers, null, 2));
     const body = {
       model: settings.anthropicModel,
+      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
       messages: [
-        {
-          role: 'system',
-          content: '以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
-        },
         {
           role: 'user',
           content: text
