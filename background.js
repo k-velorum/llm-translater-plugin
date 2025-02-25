@@ -2,7 +2,7 @@
 const DEFAULT_SETTINGS = {
   apiProvider: 'openrouter', // openrouter または gemini
   openrouterApiKey: '',
-  openrouterModel: 'openai/gpt-4o', // 使用する正確なモデル名に合わせる
+  openrouterModel: 'openai/gpt-4o-mini', // 使用する正確なモデル名に合わせる
   geminiApiKey: 'YOUR_API_KEY',
   geminiModel: 'gemini-flash-2.0'
 };
@@ -94,7 +94,6 @@ async function translateWithOpenRouter(text, settings) {
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${settings.openrouterApiKey}`,
-      'HTTP-Referer': 'chrome-extension://llm-translator',
       'X-Title': 'LLM Translation Plugin'
     };
     console.log('OpenRouter リクエストヘッダー:', JSON.stringify(headers, null, 2));
@@ -229,7 +228,6 @@ async function verifyOpenRouterApiKey(apiKey) {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'chrome-extension://llm-translator',
         'X-Title': 'LLM Translation Plugin'
       }
     });
@@ -262,7 +260,6 @@ async function testOpenRouter(text, apiKey, model) {
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'chrome-extension://llm-translator',
       'X-Title': 'LLM Translation Plugin'
     };
     console.log('OpenRouterテスト - ヘッダー:', JSON.stringify(headers, null, 2));
