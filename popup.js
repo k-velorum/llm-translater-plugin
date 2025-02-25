@@ -7,7 +7,258 @@ function init() {
   createVerificationUI(elements);
   loadSettings(elements);
   bindEventHandlers(elements);
+  initSelect2(elements);
   loadAnthropicModels(elements);
+  loadOpenRouterModels(elements);
+}
+
+// Select2の初期化
+function initSelect2(elements) {
+  // jQueryが読み込まれているか確認
+  if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+    $('.model-select').select2({
+      placeholder: 'モデルを選択',
+      allowClear: true,
+      width: '100%',
+      templateResult: formatModelOption
+    });
+    
+    // モデル選択時の処理
+    $('#openrouter-model').on('select2:select', function(e) {
+      const modelId = e.params.data.id;
+      const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
+      if (modelData) {
+        updateModelInfo('openrouter', modelData);
+      }
+    });
+    
+    $('#anthropic-model').on('select2:select', function(e) {
+      const modelId = e.params.data.id;
+      const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
+      if (modelData) {
+        updateModelInfo('anthropic', modelData);
+      }
+    });
+  } else {
+    console.error('Select2またはjQueryが読み込まれていません');
+  }
+}
+
+// モデルオプションの表示形式をカスタマイズ
+function formatModelOption(model) {
+  if (!model.id) {
+    return model.text;
+  }
+  
+  const $option = $(model.element);
+  const modelData = $option.data('model');
+  
+  if (!modelData) {
+    return model.text;
+  }
+  
+  // OpenRouterモデルの場合
+  if (modelData.id && modelData.name) {
+    let $result = $('<div class="model-option"></div>');
+    let $name = $('<div class="model-name"></div>').text(modelData.name);
+    
+    $result.append($name)
+    return $result;
+  }
+  
+  return model.text;
+}
+
+// モデル情報の表示を更新
+function updateModelInfo(provider, modelData) {
+  const infoElement = document.getElementById(`${provider}-model-info`);
+  if (!infoElement || !modelData) return;
+  
+  let infoText = '';
+  
+  if (provider === 'openrouter') {
+    infoText = `モデル: ${modelData.name}`;
+    if (modelData.context_length) {
+      infoText += `<br>コンテキスト長: ${modelData.context_length}`;
+    }
+    if (modelData.pricing && modelData.pricing.prompt) {
+      infoText += `<br>入力料金: $${modelData.pricing.prompt} / 1M tokens`;
+    }
+    if (modelData.pricing && modelData.pricing.completion) {
+      infoText += `<br>出力料金: $${modelData.pricing.completion} / 1M tokens`;
+    }
+  } else if (provider === 'anthropic') {
+    infoText = `モデル: ${modelData.name || modelData.id}`;
+    if (modelData.context_window) {
+      infoText += `<br>コンテキスト長: ${modelData.context_window}`;
+    }
+    if (modelData.description) {
+      infoText += `<br>${modelData.description}`;
+    }
+  }
+  
+  infoElement.innerHTML = infoText;
+}
+
+// OpenRouterモデル一覧の取得と設定
+async function loadOpenRouterModels(elements) {
+  const { openrouterModelSelect, openrouterApiKeyInput } = elements;
+  
+  // 保存されているAPIキーを取得
+  chrome.storage.sync.get(['openrouterApiKey'], async (settings) => {
+    if (settings.openrouterApiKey) {
+      try {
+        const models = await fetchOpenRouterModels(settings.openrouterApiKey);
+        populateOpenRouterModelSelect(openrouterModelSelect, models);
+      } catch (error) {
+        console.error('OpenRouterモデル一覧の取得に失敗:', error);
+        // エラー時はデフォルトモデルを設定
+        setDefaultOpenRouterModels(openrouterModelSelect);
+      }
+    } else {
+      // APIキーがない場合はデフォルトモデルを設定
+      setDefaultOpenRouterModels(openrouterModelSelect);
+      
+      // APIキーがない場合でも、公開APIからモデル一覧を取得
+      try {
+        const models = await fetchOpenRouterModels();
+        populateOpenRouterModelSelect(openrouterModelSelect, models);
+      } catch (error) {
+        console.error('公開APIからのOpenRouterモデル一覧の取得に失敗:', error);
+      }
+    }
+  });
+}
+
+// OpenRouterのAPIからモデル一覧を取得
+async function fetchOpenRouterModels(apiKey) {
+  try {
+    // 直接フェッチ試行
+    const headers = {
+      'HTTP-Referer': 'chrome-extension://llm-translator',
+      'X-Title': 'LLM Translation Plugin'
+    };
+    
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+    
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: headers
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.data || [];
+    }
+    
+    // 直接フェッチが失敗した場合、バックグラウンド経由で試行
+    return await fetchOpenRouterModelsViaBackground(apiKey);
+  } catch (error) {
+    console.error('OpenRouterモデル取得エラー:', error);
+    return await fetchOpenRouterModelsViaBackground(apiKey);
+  }
+}
+
+// バックグラウンド経由でOpenRouterモデル一覧を取得
+function fetchOpenRouterModelsViaBackground(apiKey) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      {
+        action: 'getOpenRouterModels',
+        apiKey: apiKey
+      },
+      response => {
+        if (chrome.runtime.lastError) {
+          return reject(new Error(`バックグラウンドスクリプトエラー: ${chrome.runtime.lastError.message}`));
+        }
+        if (response.error) {
+          return reject(new Error(response.error.message || 'モデル取得エラー'));
+        }
+        resolve(response.models || []);
+      }
+    );
+  });
+}
+
+// OpenRouterモデル選択要素にモデル一覧をセット
+function populateOpenRouterModelSelect(selectElement, models) {
+  // 現在選択されているモデルを保存
+  const selectedModel = selectElement.value;
+  
+  // 既存のオプションをクリア
+  selectElement.innerHTML = '';
+  
+  if (models && models.length > 0) {
+    // 取得したモデルでオプションを生成
+    models.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = `${model.name} (${model.id})`;
+      
+      // モデルデータをdata属性に保存
+      $(option).data('model', model);
+      
+      selectElement.appendChild(option);
+    });
+    
+    // 前回選択していたモデルがあれば選択状態を復元
+    if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
+      selectElement.value = selectedModel;
+      
+      // Select2の更新
+      if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+        $(selectElement).trigger('change');
+        
+        // モデル情報を更新
+        const modelData = $(selectElement).find(`option[value="${selectedModel}"]`).data('model');
+        if (modelData) {
+          updateModelInfo('openrouter', modelData);
+        }
+      }
+    }
+  } else {
+    // モデルが取得できない場合はデフォルトモデルをセット
+    setDefaultOpenRouterModels(selectElement);
+  }
+}
+
+// デフォルトのOpenRouterモデルをセット
+function setDefaultOpenRouterModels(selectElement) {
+  const defaultModels = [
+    { id: 'openai/gpt-4o-mini', name: 'GPT 4o mini' },
+    { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku' },
+    { id: 'anthropic/claude-3.7-sonnet', name: 'Claude 3.7 Sonnet' }
+  ];
+  
+  // 現在選択されているモデルを保存
+  const selectedModel = selectElement.value;
+  
+  // 既存のオプションをクリア
+  selectElement.innerHTML = '';
+  
+  // デフォルトモデルでオプションを生成
+  defaultModels.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = model.name;
+    
+    // モデルデータをdata属性に保存
+    $(option).data('model', model);
+    
+    selectElement.appendChild(option);
+  });
+  
+  // 前回選択していたモデルがあれば選択状態を復元
+  if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
+    selectElement.value = selectedModel;
+    
+    // Select2の更新
+    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+      $(selectElement).trigger('change');
+    }
+  }
 }
 
 // Anthropicモデル一覧の取得と設定
@@ -92,12 +343,27 @@ function populateAnthropicModelSelect(selectElement, models) {
       const option = document.createElement('option');
       option.value = model.id;
       option.textContent = `${model.name} (${model.id})`;
+      
+      // モデルデータをdata属性に保存
+      $(option).data('model', model);
+      
       selectElement.appendChild(option);
     });
     
     // 前回選択していたモデルがあれば選択状態を復元
     if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
       selectElement.value = selectedModel;
+      
+      // Select2の更新
+      if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+        $(selectElement).trigger('change');
+        
+        // モデル情報を更新
+        const modelData = $(selectElement).find(`option[value="${selectedModel}"]`).data('model');
+        if (modelData) {
+          updateModelInfo('anthropic', modelData);
+        }
+      }
     }
   } else {
     // モデルが取得できない場合はデフォルトモデルをセット
@@ -123,16 +389,23 @@ function setDefaultAnthropicModels(selectElement) {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.name;
+    
+    // モデルデータをdata属性に保存
+    $(option).data('model', model);
+    
     selectElement.appendChild(option);
   });
   
   // 前回選択していたモデルがあれば選択状態を復元
   if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
     selectElement.value = selectedModel;
+    
+    // Select2の更新
+    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+      $(selectElement).trigger('change');
+    }
   }
-}
-
-function getElements() {
+}function getElements() {
   return {
     // 設定用フォーム要素
     apiProviderSelect: document.getElementById('api-provider'),
@@ -272,6 +545,8 @@ function bindEventHandlers(elements) {
     testButton, 
     anthropicApiKeyInput, 
     anthropicModelSelect,
+    openrouterApiKeyInput,
+    openrouterModelSelect,
     testProxyButton,
     saveAdvancedButton
   } = elements;
@@ -295,6 +570,17 @@ function bindEventHandlers(elements) {
       } catch (error) {
         console.error('APIキー変更時のモデル一覧取得エラー:', error);
       }
+    }
+  });
+  
+  // OpenRouter APIキーが変更されたときにモデル一覧を更新
+  openrouterApiKeyInput.addEventListener('change', async () => {
+    const apiKey = openrouterApiKeyInput.value.trim();
+    try {
+      const models = await fetchOpenRouterModels(apiKey);
+      populateOpenRouterModelSelect(openrouterModelSelect, models);
+    } catch (error) {
+      console.error('APIキー変更時のモデル一覧取得エラー:', error);
     }
   });
 }
@@ -371,6 +657,10 @@ async function verifyOpenRouterApiKey(apiKey, statusElem, buttonElem) {
       console.log('OpenRouter モデル一覧:', data);
       statusElem.textContent = '✓ APIキーは有効です';
       statusElem.style.color = '#155724';
+      
+      // モデル一覧を更新
+      const { openrouterModelSelect } = getElements();
+      populateOpenRouterModelSelect(openrouterModelSelect, data.data || []);
     } else {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
       console.error('OpenRouter APIキー検証エラー:', errorData);
@@ -383,6 +673,11 @@ async function verifyOpenRouterApiKey(apiKey, statusElem, buttonElem) {
       await verifyOpenRouterApiKeyViaBackground(apiKey);
       statusElem.textContent = '✓ APIキーは有効です (バックグラウンド経由)';
       statusElem.style.color = '#155724';
+      
+      // モデル一覧を更新
+      const models = await fetchOpenRouterModelsViaBackground(apiKey);
+      const { openrouterModelSelect } = getElements();
+      populateOpenRouterModelSelect(openrouterModelSelect, models);
     } catch (bgError) {
       console.error('バックグラウンド経由検証エラー:', bgError);
       statusElem.textContent = `✗ APIキー検証失敗: ${bgError.message || 'ネットワークエラー'}`;
@@ -531,11 +826,41 @@ function loadSettings({
         anthropicSection.classList.remove('hidden');
       }
       
-      // Anthropicモデルの選択状態は、モデル一覧が取得された後に設定される
+      // モデルの選択状態は、モデル一覧が取得された後に設定される
+      if (settings.openrouterModel) {
+        setTimeout(() => {
+          if (Array.from(openrouterModelSelect.options).some(opt => opt.value === settings.openrouterModel)) {
+            openrouterModelSelect.value = settings.openrouterModel;
+            
+            // Select2の更新
+            if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+              $(openrouterModelSelect).trigger('change');
+              
+              // モデル情報を更新
+              const modelData = $(openrouterModelSelect).find(`option[value="${settings.openrouterModel}"]`).data('model');
+              if (modelData) {
+                updateModelInfo('openrouter', modelData);
+              }
+            }
+          }
+        }, 500); // モデル一覧の読み込み完了を待つための遅延
+      }
+      
       if (settings.anthropicModel) {
         setTimeout(() => {
           if (Array.from(anthropicModelSelect.options).some(opt => opt.value === settings.anthropicModel)) {
             anthropicModelSelect.value = settings.anthropicModel;
+            
+            // Select2の更新
+            if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+              $(anthropicModelSelect).trigger('change');
+              
+              // モデル情報を更新
+              const modelData = $(anthropicModelSelect).find(`option[value="${settings.anthropicModel}"]`).data('model');
+              if (modelData) {
+                updateModelInfo('anthropic', modelData);
+              }
+            }
           }
         }, 500); // モデル一覧の読み込み完了を待つための遅延
       }

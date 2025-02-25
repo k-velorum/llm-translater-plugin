@@ -98,7 +98,9 @@ async function translateText(text, settings) {
   } else {
     return await translateWithGemini(text, settings);
   }
-}// OpenRouter APIでの翻訳（中間サーバー経由または直接アクセス）
+}
+
+// OpenRouter APIでの翻訳（中間サーバー経由または直接アクセス）
 async function translateWithOpenRouter(text, settings) {
   if (!settings.openrouterApiKey) {
     throw new Error('OpenRouter APIキーが設定されていません');
@@ -273,9 +275,7 @@ async function translateWithGemini(text, settings) {
     }
     throw error;
   }
-}
-
-// Anthropic APIでの翻訳（中間サーバー経由または直接アクセス）
+}// Anthropic APIでの翻訳（中間サーバー経由または直接アクセス）
 async function translateWithAnthropic(text, settings) {
   if (!settings.anthropicApiKey) {
     throw new Error('Anthropic APIキーが設定されていません');
@@ -406,7 +406,9 @@ async function translateWithAnthropic(text, settings) {
       throw error;
     }
   }
-}// バックグラウンドでのメッセージ処理
+}
+
+// バックグラウンドでのメッセージ処理
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('バックグラウンドスクリプトがメッセージを受信:', message);
   
@@ -481,6 +483,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
       .catch(error => {
         console.error('Anthropicモデル一覧取得エラー:', error);
+        sendResponse({ error: { message: error.message, details: error.stack || '' } });
+      });
+    return true;
+  }
+  
+  // OpenRouterモデル一覧リクエストの処理
+  if (message.action === 'getOpenRouterModels') {
+    console.log('ポップアップからのOpenRouterモデル一覧リクエストを受信');
+    getOpenRouterModels(message.apiKey)
+      .then(models => {
+        console.log('OpenRouterモデル一覧取得成功:', models);
+        sendResponse({ models: models });
+      })
+      .catch(error => {
+        console.error('OpenRouterモデル一覧取得エラー:', error);
         sendResponse({ error: { message: error.message, details: error.stack || '' } });
       });
     return true;
@@ -579,6 +596,104 @@ async function getAnthropicModels(apiKey) {
           // 利用可能なモデルのみをフィルタリング
           const availableModels = data.models || [];
           return availableModels;
+        } catch (proxyError) {
+          console.error('中間サーバー経由でのモデル一覧取得中にエラーが発生:', proxyError);
+          throw proxyError;
+        }
+      }
+      
+      throw error;
+    }
+  }
+}
+
+// OpenRouterモデルリストをAPIから取得（中間サーバー経由または直接アクセス）
+async function getOpenRouterModels(apiKey) {
+  if (!apiKey) {
+    throw new Error('APIキーが指定されていません');
+  }
+  console.log('OpenRouterモデル一覧を取得中...');
+  
+  // 設定を読み込み
+  const settings = await loadSettings();
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/models/openrouter`;
+    
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+      }
+      
+      const data = await response.json();
+      console.log('OpenRouter モデル一覧:', data);
+      
+      return data.data || [];
+    } catch (error) {
+      console.error('OpenRouterモデル一覧取得中にエラーが発生:', error);
+      throw error;
+    }
+  } else {
+    // 直接APIにアクセス
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': apiKey ? `Bearer ${apiKey}` : '',
+          'HTTP-Referer': 'chrome-extension://llm-translator',
+          'X-Title': 'LLM Translation Plugin'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+      }
+      
+      const data = await response.json();
+      console.log('OpenRouter モデル一覧:', data);
+      
+      return data.data || [];
+    } catch (error) {
+      console.error('OpenRouterモデル一覧取得中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        const proxyUrl = `${tempSettings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/models/openrouter`;
+        
+        try {
+          const response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ apiKey })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+          }
+          
+          const data = await response.json();
+          console.log('OpenRouter モデル一覧 (中間サーバー経由):', data);
+          
+          return data.data || [];
         } catch (proxyError) {
           console.error('中間サーバー経由でのモデル一覧取得中にエラーが発生:', proxyError);
           throw proxyError;

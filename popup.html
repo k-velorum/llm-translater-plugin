@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM翻訳設定</title>
+  <!-- Select2 CSS (ローカル) -->
+  <link href="lib/select2.min.css" rel="stylesheet" />
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -159,6 +161,31 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    
+    /* Select2カスタマイズ */
+    .select2-container {
+      width: 100% !important;
+    }
+    
+    .select2-container--default .select2-selection--single {
+      height: 38px;
+      padding: 5px 0;
+      border: 1px solid #ccc;
+    }
+    
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 36px;
+    }
+    
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+      background-color: #4285f4;
+    }
+    
+    .model-info {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -191,11 +218,10 @@
       
       <div class="form-group">
         <label for="openrouter-model">モデル</label>
-        <select id="openrouter-model">
-          <option value="openai/gpt-4o-mini">GPT 4o mini</option>
-          <option value="anthropic/claude-3.5-haiku">haiku-3.5</option>
-          <option value="anthropic/claude-3.7-sonnet">sonnet-3.7</option>
+        <select id="openrouter-model" class="model-select">
+          <option value="">モデルを読み込み中...</option>
         </select>
+        <div id="openrouter-model-info" class="model-info"></div>
       </div>
     </div>
     
@@ -228,10 +254,11 @@
       
       <div class="form-group">
         <label for="anthropic-model">モデル</label>
-        <select id="anthropic-model">
+        <select id="anthropic-model" class="model-select">
           <!-- モデル一覧は動的に生成されます -->
           <option value="">モデルを読み込み中...</option>
         </select>
+        <div id="anthropic-model-info" class="model-info"></div>
       </div>
     </div>
     
@@ -296,6 +323,9 @@
     <button id="save-advanced-button">詳細設定を保存</button>
   </div>
   
+  <!-- jQuery と Select2 (ローカル) -->
+  <script src="lib/jquery.min.js"></script>
+  <script src="lib/select2.min.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
