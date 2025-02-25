@@ -5,7 +5,6 @@ let translationPopup = null;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'showTranslation') {
     showTranslationPopup(message.translatedText);
-    return true;
   }
 });
 
