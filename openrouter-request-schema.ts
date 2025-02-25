@@ -1,3 +1,7 @@
+//これはOpenRouterのリクエストスキーマの定義です。
+// Openrouter Documentより引用 2025.02.25
+
+
 // Definitions of subtypes are below
 type Request = {
   // Either "messages" or "prompt" is required

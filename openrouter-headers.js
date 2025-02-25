@@ -1,3 +1,5 @@
+//これはOpenrouterのAPIを使用して、ヘッダーを使用してリクエストを送信する方法を示しています。
+// Openrouter Documentより引用 2025.02.25
 fetch('https://openrouter.ai/api/v1/chat/completions', {
   method: 'POST',
   headers: {
