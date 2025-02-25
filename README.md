@@ -1,6 +1,6 @@
 # LLM翻訳プラグイン
 
-GoogleChrome用の拡張機能で、選択したテキストをLLM（大規模言語モデル）を使用して翻訳します。OpenRouter、Google Gemini、またはAnthropic APIを利用して翻訳機能を提供します。
+Google Chrome用の拡張機能で、選択したテキストをLLM（大規模言語モデル）を使用して翻訳します。OpenRouter、Google Gemini、またはAnthropic APIを利用して翻訳機能を提供します。
 
 ## 機能
 
