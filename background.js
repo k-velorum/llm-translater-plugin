@@ -3,10 +3,10 @@ const DEFAULT_SETTINGS = {
   apiProvider: 'openrouter', // openrouter または gemini または anthropic
   openrouterApiKey: '',
   openrouterModel: 'openai/gpt-4o-mini', // 使用する正確なモデル名に合わせる
-  geminiApiKey: 'YOUR_API_KEY',
+  geminiApiKey: '',
   geminiModel: 'gemini-flash-2.0',
   anthropicApiKey: '',
-  anthropicModel: 'claude-3-5-sonnet-20240620'
+  anthropicModel: 'claude-3-5-haiku-20241022'
 };
 
 // 設定の読み込み（必要な場合は利用）
