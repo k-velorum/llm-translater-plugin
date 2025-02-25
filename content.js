@@ -213,21 +213,42 @@ function addButtonToTweet(tweetElement) {
   translateButton.style.fontSize = '13px';
   translateButton.setAttribute('role', 'button');
   translateButton.setAttribute('aria-label', 'LLM翻訳');
+  
+  // スピナーのスタイルを定義
+  const spinnerStyle = `
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      animation: rotate 1.5s linear infinite;
+      display: none;
+    }
+  `;
+  
+  // スタイル要素を作成して追加
+  const styleElement = document.createElement('style');
+  styleElement.textContent = spinnerStyle;
+  document.head.appendChild(styleElement);
+  
+  // 通常アイコンとローディングスピナーを含むHTML
   translateButton.innerHTML = `
     <div style="display: flex; align-items: center;">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-right: 4px;">
+      <svg class="translate-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
         <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
       </svg>
-      <span>LLM翻訳</span>
+      <svg class="spinner" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+        <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
+      </svg>
     </div>
   `;
 
+  // 翻訳アイコンとスピナーの要素を取得
+  const translateIcon = translateButton.querySelector('.translate-icon');
+  const spinner = translateButton.querySelector('.spinner');
+
   // 翻訳ボタンのクリックイベント
   translateButton.addEventListener('click', () => {
-    // ボタンの状態を「翻訳中...」に変更
-    translateButton.style.color = '#1DA1F2';
-    translateButton.querySelector('span').textContent = '翻訳中...';
-
     // ツイートのテキストを取得
     const tweetText = tweetTextElement.textContent;
 
@@ -236,9 +257,13 @@ function addButtonToTweet(tweetElement) {
     if (existingTranslation) {
       existingTranslation.remove();
       translateButton.style.color = 'rgb(83, 100, 113)';
-      translateButton.querySelector('span').textContent = 'LLM翻訳';
       return;
     }
+
+    // ローディング状態を表示
+    translateButton.style.color = '#1DA1F2';
+    translateIcon.style.display = 'none';
+    spinner.style.display = 'block';
 
     // バックグラウンドスクリプトに翻訳リクエストを送信
     chrome.runtime.sendMessage(
@@ -249,7 +274,8 @@ function addButtonToTweet(tweetElement) {
       (response) => {
         // ボタンの状態を元に戻す
         translateButton.style.color = 'rgb(83, 100, 113)';
-        translateButton.querySelector('span').textContent = 'LLM翻訳';
+        translateIcon.style.display = 'block';
+        spinner.style.display = 'none';
 
         if (chrome.runtime.lastError) {
           console.error('翻訳リクエストエラー:', chrome.runtime.lastError);
