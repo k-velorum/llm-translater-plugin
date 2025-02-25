@@ -167,7 +167,6 @@
   <div class="tabs">
     <div class="tab active" data-tab="settings">設定</div>
     <div class="tab" data-tab="test">テスト</div>
-    <div class="tab" data-tab="advanced">詳細設定</div>
   </div>
   
   <div id="settings-tab" class="tab-content active">
@@ -259,41 +258,6 @@
     <div id="test-status" class="status hidden"></div>
     
     <div id="test-result" class="test-result hidden"></div>
-  </div>
-  
-  <!-- 詳細設定タブ -->
-  <div id="advanced-tab" class="tab-content">
-    <div class="api-section">
-      <div class="api-heading">中間サーバー設定</div>
-      <p style="font-size: 12px; margin-bottom: 10px;">
-        CORS制約を回避するための中間サーバーのURLを設定します。<br>
-        OpenRouterとAnthropicのAPIリクエストはこのサーバーを経由して行うことができます。
-      </p>
-      
-      <div class="form-group">
-        <label for="proxy-server-url">中間サーバーURL</label>
-        <input type="text" id="proxy-server-url" placeholder="http://localhost:3000" />
-      </div>
-      
-      <div class="form-group">
-        <label for="use-proxy-server">
-          <input type="checkbox" id="use-proxy-server" />
-          中間サーバーを利用する
-        </label>
-        <p style="font-size: 12px; margin-top: 5px; color: #666;">
-          チェックを外すと、APIに直接アクセスを試みます。<br>
-          ブラウザのCORS制約により、直接アクセスが失敗する場合があります。
-        </p>
-      </div>
-      
-      <div class="form-group">
-        <button id="test-proxy-button" class="test-button">中間サーバー接続テスト</button>
-      </div>
-      
-      <div id="proxy-status" class="status hidden"></div>
-    </div>
-    
-    <button id="save-advanced-button">詳細設定を保存</button>
   </div>
   
   <script src="popup.js"></script>

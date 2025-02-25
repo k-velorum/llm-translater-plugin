@@ -136,3 +136,182 @@ function closePopupOnClickOutside(event) {
     document.removeEventListener('click', closePopupOnClickOutside);
   }
 }
+
+// Twitter（x.com）のツイート翻訳機能
+// ツイートに翻訳ボタンを追加する関数
+function addTranslateButtonToTweets() {
+  // Twitterのドメインかどうかをチェック
+  if (!window.location.hostname.includes('twitter.com') && !window.location.hostname.includes('x.com')) {
+    return;
+  }
+
+  console.log('Twitter/X.comページを検出しました。翻訳ボタンを追加します。');
+
+  // ツイート要素を見つけるためのセレクタ
+  // 注意: Twitterのセレクタは変更される可能性があるため、定期的に確認が必要
+  const tweetSelector = 'article[data-testid="tweet"]';
+
+  // 既存のツイートに翻訳ボタンを追加
+  document.querySelectorAll(tweetSelector).forEach(addButtonToTweet);
+
+  // MutationObserverを使用して新しく追加されるツイートを監視
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+        mutation.addedNodes.forEach((node) => {
+          // 追加されたノードがエレメントの場合
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // ノード自体がツイートかチェック
+            if (node.matches && node.matches(tweetSelector)) {
+              addButtonToTweet(node);
+            }
+            // ノードの子要素にツイートがあるかチェック
+            const tweets = node.querySelectorAll(tweetSelector);
+            tweets.forEach(addButtonToTweet);
+          }
+        });
+      }
+    });
+  });
+
+  // body全体を監視
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  console.log('ツイート監視を開始しました');
+}
+
+// 個々のツイートに翻訳ボタンを追加する関数
+function addButtonToTweet(tweetElement) {
+  // 既にボタンが追加されているかチェック
+  if (tweetElement.querySelector('.llm-translate-button')) {
+    return;
+  }
+
+  // ツイートのテキスト部分を取得
+  const tweetTextElement = tweetElement.querySelector('[data-testid="tweetText"]');
+  if (!tweetTextElement) {
+    return; // テキストがないツイート（画像のみなど）はスキップ
+  }
+
+  // ツイートのアクションバーを取得（リツイート、いいねなどのボタンがある部分）
+  const actionBar = tweetElement.querySelector('[role="group"]');
+  if (!actionBar) {
+    return;
+  }
+
+  // 翻訳ボタンを作成
+  const translateButton = document.createElement('div');
+  translateButton.className = 'llm-translate-button';
+  translateButton.style.display = 'flex';
+  translateButton.style.alignItems = 'center';
+  translateButton.style.cursor = 'pointer';
+  translateButton.style.color = 'rgb(83, 100, 113)';
+  translateButton.style.padding = '0 12px';
+  translateButton.style.fontSize = '13px';
+  translateButton.setAttribute('role', 'button');
+  translateButton.setAttribute('aria-label', 'LLM翻訳');
+  translateButton.innerHTML = `
+    <div style="display: flex; align-items: center;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-right: 4px;">
+        <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
+      </svg>
+      <span>LLM翻訳</span>
+    </div>
+  `;
+
+  // 翻訳ボタンのクリックイベント
+  translateButton.addEventListener('click', () => {
+    // ボタンの状態を「翻訳中...」に変更
+    translateButton.style.color = '#1DA1F2';
+    translateButton.querySelector('span').textContent = '翻訳中...';
+
+    // ツイートのテキストを取得
+    const tweetText = tweetTextElement.textContent;
+
+    // 既に翻訳結果が表示されている場合は削除
+    const existingTranslation = tweetElement.querySelector('.llm-tweet-translation');
+    if (existingTranslation) {
+      existingTranslation.remove();
+      translateButton.style.color = 'rgb(83, 100, 113)';
+      translateButton.querySelector('span').textContent = 'LLM翻訳';
+      return;
+    }
+
+    // バックグラウンドスクリプトに翻訳リクエストを送信
+    chrome.runtime.sendMessage(
+      {
+        action: 'translateTweet',
+        text: tweetText
+      },
+      (response) => {
+        // ボタンの状態を元に戻す
+        translateButton.style.color = 'rgb(83, 100, 113)';
+        translateButton.querySelector('span').textContent = 'LLM翻訳';
+
+        if (chrome.runtime.lastError) {
+          console.error('翻訳リクエストエラー:', chrome.runtime.lastError);
+          showTweetTranslation(tweetElement, tweetTextElement, `翻訳エラー: ${chrome.runtime.lastError.message}`);
+          return;
+        }
+
+        if (response.error) {
+          console.error('翻訳エラー:', response.error);
+          showTweetTranslation(tweetElement, tweetTextElement, `翻訳エラー: ${response.error.message || '不明なエラー'}`);
+          return;
+        }
+
+        // 翻訳結果を表示
+        showTweetTranslation(tweetElement, tweetTextElement, response.translatedText);
+      }
+    );
+  });
+
+  // アクションバーに翻訳ボタンを追加
+  actionBar.appendChild(translateButton);
+}
+
+// ツイートの下に翻訳結果を表示する関数
+function showTweetTranslation(tweetElement, tweetTextElement, translatedText) {
+  // 既に翻訳結果が表示されている場合は削除
+  const existingTranslation = tweetElement.querySelector('.llm-tweet-translation');
+  if (existingTranslation) {
+    existingTranslation.remove();
+  }
+
+  // 翻訳結果の要素を作成
+  const translationElement = document.createElement('div');
+  translationElement.className = 'llm-tweet-translation';
+  translationElement.style.marginTop = '8px';
+  translationElement.style.padding = '8px 12px';
+  translationElement.style.backgroundColor = '#46627e';
+  translationElement.style.borderRadius = '8px';
+  translationElement.style.fontSize = '14px';
+  translationElement.style.color = '#FFF';
+  translationElement.style.whiteSpace = 'pre-wrap';
+  translationElement.style.wordBreak = 'break-word';
+  translationElement.style.lineHeight = '1.4';
+
+  // エラーメッセージかどうかをチェック
+  if (translatedText.includes('翻訳エラー')) {
+    translationElement.style.backgroundColor = '#fff0f0';
+    translationElement.style.color = '#d32f2f';
+  }
+
+  translationElement.textContent = translatedText;
+
+  // ツイートのテキスト要素の後に翻訳結果を挿入
+  tweetTextElement.parentNode.insertBefore(translationElement, tweetTextElement.nextSibling);
+}
+
+// ページ読み込み完了時に実行
+document.addEventListener('DOMContentLoaded', () => {
+  addTranslateButtonToTweets();
+});
+
+// すでにDOMが読み込まれている場合のために即時実行も行う
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
+  addTranslateButtonToTweets();
+}

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LLM翻訳プラグイン",
   "version": "1.0",
-  "description": "選択したテキストをLLMを使用して翻訳する拡張機能",
+  "description": "選択したテキストやTwitterのツイートをLLMを使用して翻訳する拡張機能",
   "permissions": [
     "contextMenus",
     "storage",
@@ -10,9 +10,11 @@
   ],
   "host_permissions": [
     "https://api.openai.com/*",
-    "https://api.openrouter.ai/*",
+    "https://openrouter.ai/*",
     "https://api.anthropic.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://*.twitter.com/*",
+    "https://*.x.com/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -6,7 +6,9 @@ const DEFAULT_SETTINGS = {
   geminiApiKey: '',
   geminiModel: 'gemini-flash-2.0',
   anthropicApiKey: '',
-  anthropicModel: 'claude-3-5-haiku-20241022'
+  anthropicModel: 'claude-3-5-haiku-20241022',
+  proxyServerUrl: 'http://localhost:3000', // 中間サーバーのURL
+  useProxyServer: false // デフォルトは中間サーバーを利用しない
 };
 
 // 設定の読み込み（必要な場合は利用）
@@ -96,70 +98,142 @@ async function translateText(text, settings) {
   } else {
     return await translateWithGemini(text, settings);
   }
-}
-
-// OpenRouter APIでの翻訳（fetchのみ）
+}// OpenRouter APIでの翻訳（中間サーバー経由または直接アクセス）
 async function translateWithOpenRouter(text, settings) {
   if (!settings.openrouterApiKey) {
     throw new Error('OpenRouter APIキーが設定されていません');
   }
-  const apiUrl = 'https://api.openrouter.ai/api/v1/chat/completions';
-  console.log(`OpenRouter API リクエスト開始: ${apiUrl}`);
-  console.log(`使用モデル: ${settings.openrouterModel}`);
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${settings.openrouterApiKey}`,
-      'X-Title': 'LLM Translation Plugin'
-    };
-    console.log('OpenRouter リクエストヘッダー:', JSON.stringify(headers, null, 2));
-    const body = {
-      model: settings.openrouterModel,
-      messages: [
-        {
-          role: 'system',
-          content: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/openrouter`;
+    console.log(`OpenRouter API リクエスト開始（中間サーバー経由）: ${proxyUrl}`);
+    console.log(`使用モデル: ${settings.openrouterModel}`);
+    
+    try {
+      const body = {
+        apiKey: settings.openrouterApiKey,
+        model: settings.openrouterModel,
+        messages: [
+          {
+            role: 'system',
+            content: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
+          },
+          {
+            role: 'user',
+            content: text
+          }
+        ]
+      };
+      
+      console.log('OpenRouter リクエストボディ:', JSON.stringify(body, null, 2));
+      
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        {
-          role: 'user',
-          content: text
-        }
-      ]
-    };
-    console.log('OpenRouter リクエストボディ:', JSON.stringify(body, null, 2));
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-    console.log(`OpenRouter レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = JSON.stringify(errorData);
-        console.error('OpenRouter エラーレスポンス:', errorData);
-        throw new Error(`API Error: ${errorData.error || response.statusText} (${response.status})`);
-      } catch (parseError) {
+        body: JSON.stringify(body)
+      });
+      
+      console.log(`OpenRouter レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        let errorText = '';
         try {
-          errorText = await response.text();
-          console.error('OpenRouter エラーテキスト:', errorText);
-        } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした';
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+          console.error('OpenRouter エラーレスポンス:', errorData);
+          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+        } catch (parseError) {
+          try {
+            errorText = await response.text();
+            console.error('OpenRouter エラーテキスト:', errorText);
+          } catch (textError) {
+            errorText = 'レスポンステキストを取得できませんでした';
+          }
+          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
         }
-        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
       }
+      
+      const data = await response.json();
+      console.log('OpenRouter 成功レスポンス:', JSON.stringify(data, null, 2));
+      return data.choices[0].message.content.trim();
+    } catch (error) {
+      console.error('OpenRouter API リクエスト中にエラーが発生:', error);
+      throw error;
     }
-    const data = await response.json();
-    console.log('OpenRouter 成功レスポンス:', JSON.stringify(data, null, 2));
-    return data.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('OpenRouter API リクエスト中にエラーが発生:', error);
-    throw error;
+  } else {
+    // 直接APIにアクセス
+    console.log(`OpenRouter API リクエスト開始（直接アクセス）`);
+    console.log(`使用モデル: ${settings.openrouterModel}`);
+    
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${settings.openrouterApiKey}`,
+          'HTTP-Referer': 'chrome-extension://llm-translator',
+          'X-Title': 'LLM Translation Plugin'
+        },
+        body: JSON.stringify({
+          model: settings.openrouterModel,
+          messages: [
+            {
+              role: 'system',
+              content: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
+            },
+            {
+              role: 'user',
+              content: text
+            }
+          ]
+        })
+      });
+      
+      console.log(`OpenRouter レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        let errorText = '';
+        try {
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+          console.error('OpenRouter エラーレスポンス:', errorData);
+          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+        } catch (parseError) {
+          try {
+            errorText = await response.text();
+            console.error('OpenRouter エラーテキスト:', errorText);
+          } catch (textError) {
+            errorText = 'レスポンステキストを取得できませんでした';
+          }
+          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+        }
+      }
+      
+      const data = await response.json();
+      console.log('OpenRouter 成功レスポンス:', JSON.stringify(data, null, 2));
+      return data.choices[0].message.content.trim();
+    } catch (error) {
+      console.error('OpenRouter API リクエスト中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        return await translateWithOpenRouter(text, tempSettings);
+      }
+      
+      throw error;
+    }
   }
 }
 
-// Gemini APIでの翻訳（fetchのみ）
+// Gemini APIでの翻訳（直接アクセス - 変更なし）
 async function translateWithGemini(text, settings) {
   if (!settings.geminiApiKey) {
     throw new Error('Gemini APIキーが設定されていません');
@@ -201,71 +275,158 @@ async function translateWithGemini(text, settings) {
   }
 }
 
-// Anthropic APIでの翻訳
+// Anthropic APIでの翻訳（中間サーバー経由または直接アクセス）
 async function translateWithAnthropic(text, settings) {
   if (!settings.anthropicApiKey) {
     throw new Error('Anthropic APIキーが設定されていません');
   }
-  const apiUrl = 'https://api.anthropic.com/v1/messages';
-  console.log(`Anthropic API リクエスト開始: ${apiUrl}`);
-  console.log(`使用モデル: ${settings.anthropicModel}`);
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-api-key': settings.anthropicApiKey,
-      'anthropic-version': '2023-06-01'
-    };
-    console.log('Anthropic リクエストヘッダー:', JSON.stringify(headers, null, 2));
-    const body = {
-      model: settings.anthropicModel,
-      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
-      messages: [
-        {
-          role: 'user',
-          content: text
-        }
-      ],
-      max_tokens: 1024
-    };
-    console.log('Anthropic リクエストボディ:', JSON.stringify(body, null, 2));
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-    console.log(`Anthropic レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = JSON.stringify(errorData);
-        console.error('Anthropic エラーレスポンス:', errorData);
-        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
-      } catch (parseError) {
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/anthropic`;
+    console.log(`Anthropic API リクエスト開始（中間サーバー経由）: ${proxyUrl}`);
+    console.log(`使用モデル: ${settings.anthropicModel}`);
+    
+    try {
+      const body = {
+        apiKey: settings.anthropicApiKey,
+        model: settings.anthropicModel,
+        system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
+        messages: [
+          {
+            role: 'user',
+            content: text
+          }
+        ],
+        max_tokens: 1024
+      };
+      
+      console.log('Anthropic リクエストボディ:', JSON.stringify(body, null, 2));
+      
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      
+      console.log(`Anthropic レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        let errorText = '';
         try {
-          errorText = await response.text();
-          console.error('Anthropic エラーテキスト:', errorText);
-        } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした' + apiUrl + ' ' + JSON.stringify(headers) + ' ' + JSON.stringify(body) + ' ' + settings.anthropicApiKey + ' ' + settings.anthropicModel;
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+          console.error('Anthropic エラーレスポンス:', errorData);
+          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+        } catch (parseError) {
+          try {
+            errorText = await response.text();
+            console.error('Anthropic エラーテキスト:', errorText);
+          } catch (textError) {
+            errorText = 'レスポンステキストを取得できませんでした';
+          }
+          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
         }
-        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
       }
+      
+      const data = await response.json();
+      console.log('Anthropic 成功レスポンス:', JSON.stringify(data, null, 2));
+      return data.content[0].text.trim();
+    } catch (error) {
+      console.error('Anthropic API リクエスト中にエラーが発生:', error);
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('ネットワーク接続エラー: 中間サーバーに接続できません。サーバーが起動しているか確認してください。');
+      }
+      throw error;
     }
-    const data = await response.json();
-    console.log('Anthropic 成功レスポンス:', JSON.stringify(data, null, 2));
-    return data.content[0].text.trim();
-  } catch (error) {
-    console.error('Anthropic API リクエスト中にエラーが発生:', error);
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('ネットワーク接続エラー: Anthropic APIに接続できません。インターネット接続を確認してください。');
+  } else {
+    // 直接APIにアクセス
+    console.log(`Anthropic API リクエスト開始（直接アクセス）`);
+    console.log(`使用モデル: ${settings.anthropicModel}`);
+    
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': settings.anthropicApiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: settings.anthropicModel,
+          system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
+          messages: [
+            {
+              role: 'user',
+              content: text
+            }
+          ],
+          max_tokens: 1024
+        })
+      });
+      
+      console.log(`Anthropic レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        let errorText = '';
+        try {
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+          console.error('Anthropic エラーレスポンス:', errorData);
+          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+        } catch (parseError) {
+          try {
+            errorText = await response.text();
+            console.error('Anthropic エラーテキスト:', errorText);
+          } catch (textError) {
+            errorText = 'レスポンステキストを取得できませんでした';
+          }
+          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+        }
+      }
+      
+      const data = await response.json();
+      console.log('Anthropic 成功レスポンス:', JSON.stringify(data, null, 2));
+      return data.content[0].text.trim();
+    } catch (error) {
+      console.error('Anthropic API リクエスト中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        return await translateWithAnthropic(text, tempSettings);
+      }
+      
+      throw error;
     }
-    throw error;
   }
-}
-
-// バックグラウンドでのメッセージ処理
+}// バックグラウンドでのメッセージ処理
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('バックグラウンドスクリプトがメッセージを受信:', message);
+  
+  // ツイート翻訳リクエストの処理
+  if (message.action === 'translateTweet') {
+    console.log('ツイート翻訳リクエストを受信:', message);
+    loadSettings()
+      .then(settings => translateText(message.text, settings))
+      .then(translatedText => {
+        console.log('ツイート翻訳成功:', translatedText);
+        sendResponse({ translatedText: translatedText });
+      })
+      .catch(error => {
+        console.error('ツイート翻訳エラー:', error);
+        sendResponse({ error: { message: error.message, details: error.stack || '' } });
+      });
+    return true; // 非同期レスポンスを示すためにtrueを返す
+  }
+  
+  // テスト翻訳リクエストの処理
   if (message.action === 'testTranslate') {
     console.log('ポップアップからのテスト翻訳リクエストを受信:', message);
     translateText(message.text, message.settings)
@@ -279,6 +440,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  
+  // OpenRouter APIキー検証リクエストの処理
   if (message.action === 'verifyOpenRouterApiKey') {
     console.log('ポップアップからのOpenRouter APIキー検証リクエストを受信');
     verifyOpenRouterApiKey(message.apiKey)
@@ -292,6 +455,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  
+  // Anthropic APIキー検証リクエストの処理
   if (message.action === 'verifyAnthropicApiKey') {
     console.log('ポップアップからのAnthropic APIキー検証リクエストを受信');
     verifyAnthropicApiKey(message.apiKey)
@@ -305,6 +470,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  
+  // Anthropicモデル一覧リクエストの処理
   if (message.action === 'getAnthropicModels') {
     console.log('ポップアップからのAnthropicモデル一覧リクエストを受信');
     getAnthropicModels(message.apiKey)
@@ -320,100 +487,306 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
   
-// AnthropicモデルリストをAPIから取得
+// AnthropicモデルリストをAPIから取得（中間サーバー経由または直接アクセス）
 async function getAnthropicModels(apiKey) {
   if (!apiKey) {
     throw new Error('APIキーが指定されていません');
   }
   console.log('Anthropicモデル一覧を取得中...');
   
-  const apiUrl = 'https://api.anthropic.com/v1/models';
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+  // 設定を読み込み
+  const settings = await loadSettings();
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/models/anthropic`;
+    
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
       }
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+      
+      const data = await response.json();
+      console.log('Anthropic モデル一覧:', data);
+      
+      // 利用可能なモデルのみをフィルタリング
+      const availableModels = data.models || [];
+      return availableModels;
+    } catch (error) {
+      console.error('Anthropicモデル一覧取得中にエラーが発生:', error);
+      throw error;
     }
-    
-    const data = await response.json();
-    console.log('Anthropic モデル一覧:', data);
-    
-    // 利用可能なモデルのみをフィルタリング
-    const availableModels = data.models || [];
-    return availableModels;
-  } catch (error) {
-    console.error('Anthropicモデル一覧取得中にエラーが発生:', error);
-    throw error;
+  } else {
+    // 直接APIにアクセス
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+      }
+      
+      const data = await response.json();
+      console.log('Anthropic モデル一覧:', data);
+      
+      // 利用可能なモデルのみをフィルタリング
+      const availableModels = data.models || [];
+      return availableModels;
+    } catch (error) {
+      console.error('Anthropicモデル一覧取得中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        const proxyUrl = `${tempSettings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/models/anthropic`;
+        
+        try {
+          const response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ apiKey })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+          }
+          
+          const data = await response.json();
+          console.log('Anthropic モデル一覧 (中間サーバー経由):', data);
+          
+          // 利用可能なモデルのみをフィルタリング
+          const availableModels = data.models || [];
+          return availableModels;
+        } catch (proxyError) {
+          console.error('中間サーバー経由でのモデル一覧取得中にエラーが発生:', proxyError);
+          throw proxyError;
+        }
+      }
+      
+      throw error;
+    }
   }
 }
 
-// OpenRouter APIキー検証（fetchのみ）
+// OpenRouter APIキー検証（中間サーバー経由または直接アクセス）
 async function verifyOpenRouterApiKey(apiKey) {
   if (!apiKey) {
     throw new Error('APIキーが指定されていません');
   }
   console.log('OpenRouter APIキーを検証中...');
-  const apiUrl = 'https://api.openrouter.ai/api/v1/models';
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Title': 'LLM Translation Plugin'
+  
+  // 設定を読み込み
+  const settings = await loadSettings();
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/verify/openrouter`;
+    
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey })
+      });
+      
+      console.log(`OpenRouter APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
       }
-    });
-    console.log(`OpenRouter APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(`APIキーが無効です: ${errorData.error || response.statusText} (${response.status})`);
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('OpenRouter APIキー検証中にエラーが発生:', error);
+      throw error;
     }
-    const data = await response.json();
-    return {
-      isValid: true,
-      message: 'APIキーは有効です',
-      models: data.data ? data.data.length : 'データ形式が不明'
-    };
-  } catch (error) {
-    console.error('OpenRouter APIキー検証中にfetchエラーが発生:', error);
-    throw error;
+  } else {
+    // 直接APIにアクセス
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'chrome-extension://llm-translator',
+          'X-Title': 'LLM Translation Plugin'
+        }
+      });
+      
+      console.log(`OpenRouter APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+      }
+      
+      return {
+        isValid: true,
+        message: 'APIキーは有効です',
+        models: 'データ取得成功'
+      };
+    } catch (error) {
+      console.error('OpenRouter APIキー検証中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        const proxyUrl = `${tempSettings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/verify/openrouter`;
+        
+        try {
+          const response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ apiKey })
+          });
+          
+          console.log(`OpenRouter APIキー検証 (中間サーバー経由) - レスポンスステータス: ${response.status} ${response.statusText}`);
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+          }
+          
+          const data = await response.json();
+          return data;
+        } catch (proxyError) {
+          console.error('中間サーバー経由でのAPIキー検証中にエラーが発生:', proxyError);
+          throw proxyError;
+        }
+      }
+      
+      throw error;
+    }
   }
 }
 
-// Anthropic APIキー検証
+// Anthropic APIキー検証（中間サーバー経由または直接アクセス）
 async function verifyAnthropicApiKey(apiKey) {
   if (!apiKey) {
     throw new Error('APIキーが指定されていません');
   }
   console.log('Anthropic APIキーを検証中...');
-  const apiUrl = 'https://api.anthropic.com/v1/models';
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+  
+  // 設定を読み込み
+  const settings = await loadSettings();
+  
+  // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
+  if (settings.useProxyServer) {
+    // 中間サーバー経由でのリクエスト
+    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/verify/anthropic`;
+    
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey })
+      });
+      
+      console.log(`Anthropic APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
       }
-    });
-    console.log(`Anthropic APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Anthropic APIキー検証中にエラーが発生:', error);
+      throw error;
     }
-    const data = await response.json();
-    return {
-      isValid: true,
-      message: 'APIキーは有効です',
-      models: data.models ? data.models.length : 'データ形式が不明'
-    };
-  } catch (error) {
-    console.error('Anthropic APIキー検証中にfetchエラーが発生:', error);
-    throw error;
+  } else {
+    // 直接APIにアクセス
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        }
+      });
+      
+      console.log(`Anthropic APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+      }
+      
+      return {
+        isValid: true,
+        message: 'APIキーは有効です',
+        models: 'データ取得成功'
+      };
+    } catch (error) {
+      console.error('Anthropic APIキー検証中にエラーが発生:', error);
+      
+      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+        
+        // 一時的に中間サーバーを利用する設定に変更
+        const tempSettings = { ...settings, useProxyServer: true };
+        const proxyUrl = `${tempSettings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/verify/anthropic`;
+        
+        try {
+          const response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ apiKey })
+          });
+          
+          console.log(`Anthropic APIキー検証 (中間サーバー経由) - レスポンスステータス: ${response.status} ${response.statusText}`);
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+          }
+          
+          const data = await response.json();
+          return data;
+        } catch (proxyError) {
+          console.error('中間サーバー経由でのAPIキー検証中にエラーが発生:', proxyError);
+          throw proxyError;
+        }
+      }
+      
+      throw error;
+    }
   }
 }
