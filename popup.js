@@ -495,7 +495,7 @@ function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterMode
   });
 }
 
-// APIテスト処理
+// APIテスト処理（実際の翻訳処理を利用）
 function testApi(elements) {
   const { testApiProviderSelect, testTextArea, testButton, testStatus, testResult } = elements;
   const apiProvider = testApiProviderSelect.value;
@@ -514,151 +514,81 @@ function testApi(elements) {
       anthropicModel: 'claude-3-5-sonnet-20240620'
     },
     async settings => {
+      let providerSettings;
+      if (apiProvider === 'openrouter') {
+        if (!settings.openrouterApiKey) {
+          showStatus(testStatus, 'OpenRouter APIキーが設定されていません', false);
+          testButton.disabled = false;
+          return;
+        }
+        providerSettings = {
+          apiProvider: 'openrouter',
+          openrouterApiKey: settings.openrouterApiKey,
+          openrouterModel: settings.openrouterModel
+        };
+      } else if (apiProvider === 'gemini') {
+        if (!settings.geminiApiKey) {
+          showStatus(testStatus, 'Gemini APIキーが設定されていません', false);
+          testButton.disabled = false;
+          return;
+        }
+        providerSettings = {
+          apiProvider: 'gemini',
+          geminiApiKey: settings.geminiApiKey,
+          geminiModel: settings.geminiModel
+        };
+      } else if (apiProvider === 'anthropic') {
+        if (!settings.anthropicApiKey) {
+          showStatus(testStatus, 'Anthropic APIキーが設定されていません', false);
+          testButton.disabled = false;
+          return;
+        }
+        providerSettings = {
+          apiProvider: 'anthropic',
+          anthropicApiKey: settings.anthropicApiKey,
+          anthropicModel: settings.anthropicModel
+        };
+      }
+      
       try {
         testButton.disabled = true;
         showStatus(testStatus, 'テスト中...', true);
         testResult.classList.add('hidden');
-        let result;
-        
-        if (apiProvider === 'openrouter') {
-          if (!settings.openrouterApiKey) {
-            showStatus(testStatus, 'OpenRouter APIキーが設定されていません', false);
+        chrome.runtime.sendMessage(
+          {
+            action: 'testTranslate',
+            text: testText,
+            settings: providerSettings
+          },
+          response => {
+            if (chrome.runtime.lastError) {
+              showStatus(testStatus, `エラー: ${chrome.runtime.lastError.message}`, false);
+              testResult.textContent = '';
+              testResult.classList.remove('hidden');
+            } else if (response.error) {
+              showStatus(testStatus, `エラー: ${response.error.message}`, false);
+              testResult.textContent = response.error.details || '';
+              testResult.classList.remove('hidden');
+            } else {
+              showStatus(testStatus, 'テスト成功！', true);
+              testResult.textContent = response.result;
+              testResult.classList.remove('hidden');
+            }
             testButton.disabled = false;
-            return;
           }
-          result = await testOpenRouterViaBackground(testText, settings.openrouterApiKey, settings.openrouterModel);
-        } else if (apiProvider === 'gemini') {
-          if (!settings.geminiApiKey) {
-            showStatus(testStatus, 'Gemini APIキーが設定されていません', false);
-            testButton.disabled = false;
-            return;
-          }
-          result = await testGeminiApi(testText, settings.geminiApiKey, settings.geminiModel);
-        } else if (apiProvider === 'anthropic') {
-          if (!settings.anthropicApiKey) {
-            showStatus(testStatus, 'Anthropic APIキーが設定されていません', false);
-            testButton.disabled = false;
-            return;
-          }
-          result = await testAnthropicViaBackground(testText, settings.anthropicApiKey, settings.anthropicModel);
-        }
-        
-        showStatus(testStatus, 'テスト成功！', true);
-        testResult.textContent = result;
-        testResult.classList.remove('hidden');
+        );
       } catch (error) {
         console.error('APIテストエラー:', error);
         showStatus(testStatus, `エラー: ${error.message}`, false);
-        let errorDetails = error.stack || 'スタックトレース情報なし';
-        if (error.additionalInfo) {
-          errorDetails += '\n\n' + error.additionalInfo;
-        }
-        
-        if (apiProvider === 'openrouter') {
-          errorDetails +=
-            '\n\n== トラブルシューティング ==\n' +
-            '1. OpenRouterのAPIキーが正しいか確認してください\n' +
-            '2. APIキーに十分なクレジットがあるか確認してください\n' +
-            '3. OpenRouterのステータス (https://status.openrouter.ai/) を確認してください\n' +
-            '4. ネットワーク接続に問題がないか確認してください';
-        } else if (apiProvider === 'anthropic') {
-          errorDetails +=
-            '\n\n== トラブルシューティング ==\n' +
-            '1. AnthropicのAPIキーが正しいか確認してください\n' +
-            '2. APIキーに十分なクレジットがあるか確認してください\n' +
-            '3. Anthropicのステータス (https://status.anthropic.com/) を確認してください\n' +
-            '4. ネットワーク接続に問題がないか確認してください';
-        }
-        
-        testResult.textContent = `詳細エラー情報:\n${errorDetails}`;
+        testResult.textContent = error.stack || 'スタックトレース情報なし';
         testResult.classList.remove('hidden');
-      } finally {
         testButton.disabled = false;
       }
     }
   );
 }
 
-function testOpenRouterViaBackground(text, apiKey, model) {
-  return new Promise((resolve, reject) => {
-    console.log(`OpenRouterをバックグラウンド経由でテスト中... モデル: ${model}`);
-    chrome.runtime.sendMessage(
-      {
-        action: 'testOpenRouter',
-        text: text,
-        apiKey: apiKey,
-        model: model
-      },
-      response => {
-        if (chrome.runtime.lastError) {
-          console.error('バックグラウンドスクリプトへのメッセージ送信エラー:', chrome.runtime.lastError);
-          return reject(new Error(`バックグラウンドスクリプトエラー: ${chrome.runtime.lastError.message}`));
-        }
-        if (response.error) {
-          console.error('OpenRouter APIエラー:', response.error);
-          const error = new Error(response.error.message || 'OpenRouter APIエラー');
-          error.additionalInfo = response.error.details || '';
-          return reject(error);
-        }
-        resolve(response.result);
-      }
-    );
-  });
-}
-
-function testAnthropicViaBackground(text, apiKey, model) {
-  return new Promise((resolve, reject) => {
-    console.log(`Anthropicをバックグラウンド経由でテスト中... モデル: ${model}`);
-    chrome.runtime.sendMessage(
-      {
-        action: 'testAnthropic',
-        text: text,
-        apiKey: apiKey,
-        model: model
-      },
-      response => {
-        if (chrome.runtime.lastError) {
-          console.error('バックグラウンドスクリプトへのメッセージ送信エラー:', chrome.runtime.lastError);
-          return reject(new Error(`バックグラウンドスクリプトエラー: ${chrome.runtime.lastError.message}`));
-        }
-        if (response.error) {
-          console.error('Anthropic APIエラー:', response.error);
-          const error = new Error(response.error.message || 'Anthropic APIエラー');
-          error.additionalInfo = response.error.details || '';
-          return reject(error);
-        }
-        resolve(response.result);
-      }
-    );
-  });
-}
-
-async function testGeminiApi(text, apiKey, model) {
-  console.log(`Geminiをテスト中... モデル: ${model}`);
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text: `以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。\n\n${text}`
-            }
-          ]
-        }
-      ],
-      generationConfig: { temperature: 0.2 }
-    })
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(`API Error: ${errorData.error || response.statusText} (${response.status})`);
-  }
-  const data = await response.json();
-  return data.candidates[0].content.parts[0].text.trim();
-}
+// テスト用のFetch処理用関数は削除（実際の翻訳メソッドを利用）
 
 function showStatus(element, message, isSuccess) {
   element.textContent = message;

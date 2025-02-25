@@ -87,7 +87,7 @@ ${error.stack ? '\nスタックトレース:\n' + error.stack : ''}
   }
 });
 
-// テキスト翻訳関数
+// テキスト翻訳関数（実際の翻訳処理）
 async function translateText(text, settings) {
   if (settings.apiProvider === 'openrouter') {
     return await translateWithOpenRouter(text, settings);
@@ -218,8 +218,11 @@ async function translateWithAnthropic(text, settings) {
     console.log('Anthropic リクエストヘッダー:', JSON.stringify(headers, null, 2));
     const body = {
       model: settings.anthropicModel,
-      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
       messages: [
+        {
+          role: 'system',
+          content: '以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
+        },
         {
           role: 'user',
           content: text
@@ -266,15 +269,15 @@ async function translateWithAnthropic(text, settings) {
 // バックグラウンドでのメッセージ処理
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('バックグラウンドスクリプトがメッセージを受信:', message);
-  if (message.action === 'testOpenRouter') {
-    console.log('ポップアップからのOpenRouterテストリクエストを受信:', message);
-    testOpenRouter(message.text, message.apiKey, message.model)
+  if (message.action === 'testTranslate') {
+    console.log('ポップアップからのテスト翻訳リクエストを受信:', message);
+    translateText(message.text, message.settings)
       .then(result => {
-        console.log('OpenRouterテスト成功:', result);
+        console.log('テスト翻訳成功:', result);
         sendResponse({ result: result });
       })
       .catch(error => {
-        console.error('OpenRouterテストエラー:', error);
+        console.error('テスト翻訳エラー:', error);
         sendResponse({ error: { message: error.message, details: error.stack || '' } });
       });
     return true;
@@ -288,19 +291,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
       .catch(error => {
         console.error('OpenRouter APIキー検証エラー:', error);
-        sendResponse({ error: { message: error.message, details: error.stack || '' } });
-      });
-    return true;
-  }
-  if (message.action === 'testAnthropic') {
-    console.log('ポップアップからのAnthropicテストリクエストを受信:', message);
-    testAnthropic(message.text, message.apiKey, message.model)
-      .then(result => {
-        console.log('Anthropicテスト成功:', result);
-        sendResponse({ result: result });
-      })
-      .catch(error => {
-        console.error('Anthropicテストエラー:', error);
         sendResponse({ error: { message: error.message, details: error.stack || '' } });
       });
     return true;
@@ -332,7 +322,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
-
+  
 // AnthropicモデルリストをAPIから取得
 async function getAnthropicModels(apiKey) {
   if (!apiKey) {
@@ -427,125 +417,6 @@ async function verifyAnthropicApiKey(apiKey) {
     };
   } catch (error) {
     console.error('Anthropic APIキー検証中にfetchエラーが発生:', error);
-    throw error;
-  }
-}
-
-// OpenRouter APIテスト（fetchのみ）
-async function testOpenRouter(text, apiKey, model) {
-  if (!apiKey) {
-    throw new Error('OpenRouter APIキーが設定されていません');
-  }
-  const apiUrl = 'https://api.openrouter.ai/api/v1/chat/completions';
-  console.log(`OpenRouter APIテスト開始: ${apiUrl}`);
-  console.log(`使用モデル: ${model}`);
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    };
-    console.log('OpenRouterテスト - ヘッダー:', JSON.stringify(headers, null, 2));
-    const body = {
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
-        },
-        {
-          role: 'user',
-          content: text
-        }
-      ]
-    };
-    console.log('OpenRouterテスト - リクエストボディ:', JSON.stringify(body, null, 2));
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-    console.log(`OpenRouterテスト - レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = JSON.stringify(errorData);
-        console.error('OpenRouterテスト - エラーレスポンス:', errorData);
-        throw new Error(`API Error: ${errorData.error || response.statusText} (${response.status})`);
-      } catch (parseError) {
-        try {
-          errorText = await response.text();
-          console.error('OpenRouterテスト - エラーテキスト:', errorText);
-        } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした';
-        }
-        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
-      }
-    }
-    const data = await response.json();
-    console.log('OpenRouterテスト - 成功レスポンス:', JSON.stringify(data, null, 2));
-    return data.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('OpenRouterテスト中にエラーが発生:', error);
-    throw error;
-  }
-}
-
-// Anthropic APIテスト
-async function testAnthropic(text, apiKey, model) {
-  if (!apiKey) {
-    throw new Error('Anthropic APIキーが設定されていません');
-  }
-  const apiUrl = 'https://api.anthropic.com/v1/messages';
-  console.log(`Anthropic APIテスト開始: ${apiUrl}`);
-  console.log(`使用モデル: ${model}`);
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    };
-    console.log('Anthropicテスト - ヘッダー:', JSON.stringify(headers, null, 2));
-    const body = {
-      model: model,
-      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
-      messages: [
-        {
-          role: 'user',
-          content: text
-        }
-      ],
-      max_tokens: 1000
-    };
-    console.log('Anthropicテスト - リクエストボディ:', JSON.stringify(body, null, 2));
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-    console.log(`Anthropicテスト - レスポンスステータス: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = JSON.stringify(errorData);
-        console.error('Anthropicテスト - エラーレスポンス:', errorData);
-        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
-      } catch (parseError) {
-        try {
-          errorText = await response.text();
-          console.error('Anthropicテスト - エラーテキスト:', errorText);
-        } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした';
-        }
-        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
-      }
-    }
-    const data = await response.json();
-    console.log('Anthropicテスト - 成功レスポンス:', JSON.stringify(data, null, 2));
-    return data.content[0].text.trim();
-  } catch (error) {
-    console.error('Anthropicテスト中にエラーが発生:', error);
     throw error;
   }
 }
