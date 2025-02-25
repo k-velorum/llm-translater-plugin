@@ -228,7 +228,7 @@ async function translateWithAnthropic(text, settings) {
           content: text
         }
       ],
-      max_tokens: 1000
+      max_tokens: 1024
     };
     console.log('Anthropic リクエストボディ:', JSON.stringify(body, null, 2));
     const response = await fetch(apiUrl, {
@@ -249,7 +249,7 @@ async function translateWithAnthropic(text, settings) {
           errorText = await response.text();
           console.error('Anthropic エラーテキスト:', errorText);
         } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした';
+          errorText = 'レスポンステキストを取得できませんでした' + apiUrl + ' ' + JSON.stringify(headers) + ' ' + JSON.stringify(body) + ' ' + settings.anthropicApiKey + ' ' + settings.anthropicModel;
         }
         throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
       }
