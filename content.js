@@ -212,7 +212,7 @@ function addButtonToTweet(tweetElement) {
   translateButton.style.padding = '0 12px';
   translateButton.style.fontSize = '13px';
   translateButton.setAttribute('role', 'button');
-  translateButton.setAttribute('aria-label', 'LLM翻訳');
+  translateButton.setAttribute('aria-label', '日本語翻訳');
   
   // スピナーのスタイルを定義
   const spinnerStyle = `
@@ -231,11 +231,12 @@ function addButtonToTweet(tweetElement) {
   styleElement.textContent = spinnerStyle;
   document.head.appendChild(styleElement);
   
-  // 通常アイコンとローディングスピナーを含むHTML
+  // 通常アイコン（「あ」の文字を使用した独自デザイン）とローディングスピナーを含むHTML
   translateButton.innerHTML = `
     <div style="display: flex; align-items: center;">
       <svg class="translate-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-        <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
+        <path d="M 3,6 A 5,5 0 0 1 8,1 L 16,1 A 5,5 0 0 1 21,6 L 21,14 A 5,5 0 0 1 16,19 L 14,19 L 12,23 L 10,19 L 8,19 A 5,5 0 0 1 3,14 Z" fill="#f8f8f8" stroke="#555" stroke-width="1"/>
+        <text x="12" y="13.5" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#555">JP</text>
       </svg>
       <svg class="spinner" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
         <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
