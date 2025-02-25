@@ -1,10 +1,12 @@
 // デフォルト設定
 const DEFAULT_SETTINGS = {
-  apiProvider: 'openrouter', // openrouter または gemini
+  apiProvider: 'openrouter', // openrouter または gemini または anthropic
   openrouterApiKey: '',
   openrouterModel: 'openai/gpt-4o-mini', // 使用する正確なモデル名に合わせる
   geminiApiKey: 'YOUR_API_KEY',
-  geminiModel: 'gemini-flash-2.0'
+  geminiModel: 'gemini-flash-2.0',
+  anthropicApiKey: '',
+  anthropicModel: 'claude-3-5-sonnet-20240620'
 };
 
 // 設定の読み込み（必要な場合は利用）
@@ -48,11 +50,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           if (apiKey.length <= 8) return '********';
           return apiKey.substring(0, 4) + '...' + apiKey.substring(apiKey.length - 4);
         };
-        const apiProvider = settings.apiProvider === 'openrouter' ? 'OpenRouter' : 'Google Gemini';
-        const modelName = settings.apiProvider === 'openrouter' ? settings.openrouterModel : settings.geminiModel;
-        const maskedApiKey = settings.apiProvider === 'openrouter'
-          ? maskApiKey(settings.openrouterApiKey)
-          : maskApiKey(settings.geminiApiKey);
+        
+        let apiProvider, modelName, maskedApiKey;
+        
+        if (settings.apiProvider === 'openrouter') {
+          apiProvider = 'OpenRouter';
+          modelName = settings.openrouterModel;
+          maskedApiKey = maskApiKey(settings.openrouterApiKey);
+        } else if (settings.apiProvider === 'gemini') {
+          apiProvider = 'Google Gemini';
+          modelName = settings.geminiModel;
+          maskedApiKey = maskApiKey(settings.geminiApiKey);
+        } else if (settings.apiProvider === 'anthropic') {
+          apiProvider = 'Anthropic';
+          modelName = settings.anthropicModel;
+          maskedApiKey = maskApiKey(settings.anthropicApiKey);
+        }
+        
         const errorDetails = `
 ==== 翻訳エラー ====
 API プロバイダー: ${apiProvider}
@@ -77,6 +91,8 @@ ${error.stack ? '\nスタックトレース:\n' + error.stack : ''}
 async function translateText(text, settings) {
   if (settings.apiProvider === 'openrouter') {
     return await translateWithOpenRouter(text, settings);
+  } else if (settings.apiProvider === 'anthropic') {
+    return await translateWithAnthropic(text, settings);
   } else {
     return await translateWithGemini(text, settings);
   }
@@ -185,6 +201,68 @@ async function translateWithGemini(text, settings) {
   }
 }
 
+// Anthropic APIでの翻訳
+async function translateWithAnthropic(text, settings) {
+  if (!settings.anthropicApiKey) {
+    throw new Error('Anthropic APIキーが設定されていません');
+  }
+  const apiUrl = 'https://api.anthropic.com/v1/messages';
+  console.log(`Anthropic API リクエスト開始: ${apiUrl}`);
+  console.log(`使用モデル: ${settings.anthropicModel}`);
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': settings.anthropicApiKey,
+      'anthropic-version': '2023-06-01'
+    };
+    console.log('Anthropic リクエストヘッダー:', JSON.stringify(headers, null, 2));
+    const body = {
+      model: settings.anthropicModel,
+      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
+      messages: [
+        {
+          role: 'user',
+          content: text
+        }
+      ],
+      max_tokens: 1000
+    };
+    console.log('Anthropic リクエストボディ:', JSON.stringify(body, null, 2));
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
+    });
+    console.log(`Anthropic レスポンスステータス: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      let errorText = '';
+      try {
+        const errorData = await response.json();
+        errorText = JSON.stringify(errorData);
+        console.error('Anthropic エラーレスポンス:', errorData);
+        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+      } catch (parseError) {
+        try {
+          errorText = await response.text();
+          console.error('Anthropic エラーテキスト:', errorText);
+        } catch (textError) {
+          errorText = 'レスポンステキストを取得できませんでした';
+        }
+        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+      }
+    }
+    const data = await response.json();
+    console.log('Anthropic 成功レスポンス:', JSON.stringify(data, null, 2));
+    return data.content[0].text.trim();
+  } catch (error) {
+    console.error('Anthropic API リクエスト中にエラーが発生:', error);
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error('ネットワーク接続エラー: Anthropic APIに接続できません。インターネット接続を確認してください。');
+    }
+    throw error;
+  }
+}
+
 // バックグラウンドでのメッセージ処理
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('バックグラウンドスクリプトがメッセージを受信:', message);
@@ -214,7 +292,80 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  if (message.action === 'testAnthropic') {
+    console.log('ポップアップからのAnthropicテストリクエストを受信:', message);
+    testAnthropic(message.text, message.apiKey, message.model)
+      .then(result => {
+        console.log('Anthropicテスト成功:', result);
+        sendResponse({ result: result });
+      })
+      .catch(error => {
+        console.error('Anthropicテストエラー:', error);
+        sendResponse({ error: { message: error.message, details: error.stack || '' } });
+      });
+    return true;
+  }
+  if (message.action === 'verifyAnthropicApiKey') {
+    console.log('ポップアップからのAnthropic APIキー検証リクエストを受信');
+    verifyAnthropicApiKey(message.apiKey)
+      .then(result => {
+        console.log('Anthropic APIキー検証成功:', result);
+        sendResponse({ result: result });
+      })
+      .catch(error => {
+        console.error('Anthropic APIキー検証エラー:', error);
+        sendResponse({ error: { message: error.message, details: error.stack || '' } });
+      });
+    return true;
+  }
+  if (message.action === 'getAnthropicModels') {
+    console.log('ポップアップからのAnthropicモデル一覧リクエストを受信');
+    getAnthropicModels(message.apiKey)
+      .then(models => {
+        console.log('Anthropicモデル一覧取得成功:', models);
+        sendResponse({ models: models });
+      })
+      .catch(error => {
+        console.error('Anthropicモデル一覧取得エラー:', error);
+        sendResponse({ error: { message: error.message, details: error.stack || '' } });
+      });
+    return true;
+  }
 });
+
+// AnthropicモデルリストをAPIから取得
+async function getAnthropicModels(apiKey) {
+  if (!apiKey) {
+    throw new Error('APIキーが指定されていません');
+  }
+  console.log('Anthropicモデル一覧を取得中...');
+  
+  const apiUrl = 'https://api.anthropic.com/v1/models';
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(`モデル一覧の取得に失敗: ${errorData.error?.message || response.statusText} (${response.status})`);
+    }
+    
+    const data = await response.json();
+    console.log('Anthropic モデル一覧:', data);
+    
+    // 利用可能なモデルのみをフィルタリング
+    const availableModels = data.models || [];
+    return availableModels;
+  } catch (error) {
+    console.error('Anthropicモデル一覧取得中にエラーが発生:', error);
+    throw error;
+  }
+}
 
 // OpenRouter APIキー検証（fetchのみ）
 async function verifyOpenRouterApiKey(apiKey) {
@@ -248,6 +399,38 @@ async function verifyOpenRouterApiKey(apiKey) {
   }
 }
 
+// Anthropic APIキー検証
+async function verifyAnthropicApiKey(apiKey) {
+  if (!apiKey) {
+    throw new Error('APIキーが指定されていません');
+  }
+  console.log('Anthropic APIキーを検証中...');
+  const apiUrl = 'https://api.anthropic.com/v1/models';
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+    console.log(`Anthropic APIキー検証 - レスポンスステータス: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(`APIキーが無効です: ${errorData.error?.message || response.statusText} (${response.status})`);
+    }
+    const data = await response.json();
+    return {
+      isValid: true,
+      message: 'APIキーは有効です',
+      models: data.models ? data.models.length : 'データ形式が不明'
+    };
+  } catch (error) {
+    console.error('Anthropic APIキー検証中にfetchエラーが発生:', error);
+    throw error;
+  }
+}
+
 // OpenRouter APIテスト（fetchのみ）
 async function testOpenRouter(text, apiKey, model) {
   if (!apiKey) {
@@ -260,7 +443,6 @@ async function testOpenRouter(text, apiKey, model) {
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      'X-Title': 'LLM Translation Plugin'
     };
     console.log('OpenRouterテスト - ヘッダー:', JSON.stringify(headers, null, 2));
     const body = {
@@ -305,6 +487,65 @@ async function testOpenRouter(text, apiKey, model) {
     return data.choices[0].message.content.trim();
   } catch (error) {
     console.error('OpenRouterテスト中にエラーが発生:', error);
+    throw error;
+  }
+}
+
+// Anthropic APIテスト
+async function testAnthropic(text, apiKey, model) {
+  if (!apiKey) {
+    throw new Error('Anthropic APIキーが設定されていません');
+  }
+  const apiUrl = 'https://api.anthropic.com/v1/messages';
+  console.log(`Anthropic APIテスト開始: ${apiUrl}`);
+  console.log(`使用モデル: ${model}`);
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    };
+    console.log('Anthropicテスト - ヘッダー:', JSON.stringify(headers, null, 2));
+    const body = {
+      model: model,
+      system: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。',
+      messages: [
+        {
+          role: 'user',
+          content: text
+        }
+      ],
+      max_tokens: 1000
+    };
+    console.log('Anthropicテスト - リクエストボディ:', JSON.stringify(body, null, 2));
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
+    });
+    console.log(`Anthropicテスト - レスポンスステータス: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      let errorText = '';
+      try {
+        const errorData = await response.json();
+        errorText = JSON.stringify(errorData);
+        console.error('Anthropicテスト - エラーレスポンス:', errorData);
+        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+      } catch (parseError) {
+        try {
+          errorText = await response.text();
+          console.error('Anthropicテスト - エラーテキスト:', errorText);
+        } catch (textError) {
+          errorText = 'レスポンステキストを取得できませんでした';
+        }
+        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+      }
+    }
+    const data = await response.json();
+    console.log('Anthropicテスト - 成功レスポンス:', JSON.stringify(data, null, 2));
+    return data.content[0].text.trim();
+  } catch (error) {
+    console.error('Anthropicテスト中にエラーが発生:', error);
     throw error;
   }
 }

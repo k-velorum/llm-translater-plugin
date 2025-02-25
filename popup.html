@@ -145,6 +145,20 @@
     .tab-content.active {
       display: block;
     }
+    
+    .loading-spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0,0,0,0.1);
+      border-radius: 50%;
+      border-top-color: #34a853;
+      animation: spin 1s ease-in-out infinite;
+      margin: 0 auto;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -161,6 +175,7 @@
       <select id="api-provider">
         <option value="openrouter">OpenRouter API</option>
         <option value="gemini">Google Gemini API</option>
+        <option value="anthropic">Anthropic API</option>
       </select>
     </div>
     
@@ -201,6 +216,24 @@
       </div>
     </div>
     
+    <!-- Anthropic API 設定 -->
+    <div id="anthropic-section" class="api-section hidden">
+      <div class="api-heading">Anthropic API設定</div>
+      
+      <div class="form-group">
+        <label for="anthropic-api-key">Anthropic APIキー</label>
+        <input type="text" id="anthropic-api-key" placeholder="sk-ant-..." />
+      </div>
+      
+      <div class="form-group">
+        <label for="anthropic-model">モデル</label>
+        <select id="anthropic-model">
+          <!-- モデル一覧は動的に生成されます -->
+          <option value="">モデルを読み込み中...</option>
+        </select>
+      </div>
+    </div>
+    
     <button id="save-button">設定を保存</button>
     <div id="status-message" class="status hidden"></div>
   </div>
@@ -211,6 +244,7 @@
       <select id="test-api-provider">
         <option value="openrouter">OpenRouter API</option>
         <option value="gemini">Google Gemini API</option>
+        <option value="anthropic">Anthropic API</option>
       </select>
     </div>
     
