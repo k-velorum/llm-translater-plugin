@@ -68,7 +68,7 @@ Google Chrome用の拡張機能で、選択したテキストをLLM（大規模�
 
 ### 中間サーバーのセットアップ（OpenRouterとAnthropicのみ）
 
-ブラウザのCORS（Cross-Origin Resource Sharing）制約により、Chrome拡張機能からOpenRouterとAnthropicのAPIに直接POSTリクエストを送信することができません。この問題を解決するために、中間サーバーを使用します。
+ブラウザのCORS（Cross-Origin Resource Sharing）制約により、Chrome拡張機能からAnthropicのAPIに直接POSTリクエストを送信することができません。この問題を解決するために、中間サーバーを使用します。
 
 #### 中間サーバーのセットアップ
 
@@ -111,10 +111,6 @@ Google Chrome用の拡張機能で、選択したテキストをLLM（大規模�
 
 - Manifest V3に準拠したChrome拡張機能
 - OpenRouter API、Google Gemini API、Anthropic APIに対応
-- サポートしているモデル：
-  - OpenRouter: GPT-3.5 Turbo, GPT-4, Claude Instant, Claude 2, Llama 2 70B
-  - Google Gemini: Gemini Pro, Gemini Ultra
-  - Anthropic: Claude 3.5 Haiku, Claude 3.7 Sonnet
 - 中間サーバー：Node.js + Express + Docker
 
 ## 中間サーバーの技術詳細
