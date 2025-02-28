@@ -1,6 +1,97 @@
 // 翻訳結果を表示するためのポップアップ要素
 let translationPopup = null;
 
+// スタイル定義
+const styles = {
+  popup: {
+    position: 'absolute',
+    zIndex: '10000',
+    backgroundColor: 'white',
+    border: '1px solid #ccc',
+    borderRadius: '5px',
+    padding: '10px',
+    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.2)',
+    maxWidth: '400px',
+    maxHeight: '300px',
+    overflowY: 'auto',
+    fontSize: '14px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#333'
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '5px'
+  },
+  title: {
+    fontWeight: 'bold'
+  },
+  closeBtn: {
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    fontSize: '16px',
+    padding: '0 5px',
+    color: '#333'
+  },
+  content: {
+    margin: '5px 0',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    padding: '8px',
+    borderRadius: '4px'
+  },
+  normalContent: {
+    color: '#000',
+    backgroundColor: '#f8f8f8'
+  },
+  errorContent: {
+    fontFamily: 'monospace',
+    backgroundColor: '#fff0f0',
+    color: '#d32f2f'
+  },
+  copyBtn: {
+    padding: '5px 10px',
+    backgroundColor: '#f0f0f0',
+    border: '1px solid #ccc',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    marginTop: '5px',
+    color: '#333'
+  },
+  tweetTranslation: {
+    marginTop: '8px',
+    padding: '8px 12px',
+    backgroundColor: '#46627e',
+    borderRadius: '8px',
+    fontSize: '14px',
+    color: '#FFF',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    lineHeight: '1.4'
+  },
+  tweetTranslationError: {
+    backgroundColor: '#fff0f0',
+    color: '#d32f2f'
+  }
+};
+
+// スタイルをエレメントに適用する関数
+function applyStyles(element, styleObj) {
+  Object.keys(styleObj).forEach(key => {
+    element.style[key] = styleObj[key];
+  });
+}
+
+// ポップアップを削除する関数
+function removePopup() {
+  if (translationPopup) {
+    document.body.removeChild(translationPopup);
+    translationPopup = null;
+    document.removeEventListener('click', closePopupOnClickOutside);
+  }
+}
+
 // バックグラウンドスクリプトからのメッセージを受信
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'showTranslation') {
@@ -11,10 +102,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // 翻訳結果ポップアップの表示
 function showTranslationPopup(translatedText) {
   // 既存のポップアップがあれば削除
-  if (translationPopup) {
-    document.body.removeChild(translationPopup);
-    translationPopup = null;
-  }
+  removePopup();
 
   // 選択範囲の位置を取得
   const selection = window.getSelection();
@@ -26,83 +114,45 @@ function showTranslationPopup(translatedText) {
   // ポップアップ要素の作成
   translationPopup = document.createElement('div');
   translationPopup.className = 'llm-translation-popup';
-  translationPopup.style.position = 'absolute';
+  applyStyles(translationPopup, styles.popup);
   translationPopup.style.left = `${window.scrollX + rect.left}px`;
   translationPopup.style.top = `${window.scrollY + rect.bottom + 10}px`;
-  translationPopup.style.zIndex = '10000';
-  translationPopup.style.backgroundColor = 'white';
-  translationPopup.style.border = '1px solid #ccc';
-  translationPopup.style.borderRadius = '5px';
-  translationPopup.style.padding = '10px';
-  translationPopup.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
-  translationPopup.style.maxWidth = '400px';
-  translationPopup.style.maxHeight = '300px';
-  translationPopup.style.overflowY = 'auto';
-  translationPopup.style.fontSize = '14px';
-  translationPopup.style.fontFamily = 'Arial, sans-serif';
-  translationPopup.style.color = '#333'; // 全体のデフォルトテキスト色を設定
   
   // ヘッダー部分
   const header = document.createElement('div');
-  header.style.display = 'flex';
-  header.style.justifyContent = 'space-between';
-  header.style.marginBottom = '5px';
+  applyStyles(header, styles.header);
   
   const title = document.createElement('div');
   title.textContent = 'LLM翻訳結果';
-  title.style.fontWeight = 'bold';
+  applyStyles(title, styles.title);
   
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '×';
-  closeBtn.style.border = 'none';
-  closeBtn.style.background = 'none';
-  closeBtn.style.cursor = 'pointer';
-  closeBtn.style.fontSize = '16px';
-  closeBtn.style.padding = '0 5px';
-  closeBtn.style.color = '#333'; // 閉じるボタンの色を設定
-  closeBtn.onclick = () => {
-    document.body.removeChild(translationPopup);
-    translationPopup = null;
-  };
+  applyStyles(closeBtn, styles.closeBtn);
+  closeBtn.onclick = removePopup;
   
   header.appendChild(title);
   header.appendChild(closeBtn);
   
   // 翻訳テキスト部分
   const content = document.createElement('div');
+  applyStyles(content, styles.content);
   
   // エラーメッセージかどうかをチェック
   const isError = translatedText.includes('==== 翻訳エラー ====');
   
   if (isError) {
-    content.style.fontFamily = 'monospace';
-    content.style.backgroundColor = '#fff0f0';
-    content.style.padding = '8px';
-    content.style.borderRadius = '4px';
-    content.style.color = '#d32f2f';
+    applyStyles(content, styles.errorContent);
   } else {
-    // 通常の翻訳テキストの場合のスタイル
-    content.style.color = '#000'; // 黒色でテキストを表示
-    content.style.backgroundColor = '#f8f8f8'; // 背景を薄いグレーに
-    content.style.padding = '8px';
-    content.style.borderRadius = '4px';
+    applyStyles(content, styles.normalContent);
   }
   
   content.textContent = translatedText;
-  content.style.margin = '5px 0';
-  content.style.whiteSpace = 'pre-wrap';
-  content.style.wordBreak = 'break-word';
   
   // コピーボタン
   const copyBtn = document.createElement('button');
   copyBtn.textContent = 'コピー';
-  copyBtn.style.padding = '5px 10px';
-  copyBtn.style.backgroundColor = '#f0f0f0';
-  copyBtn.style.border = '1px solid #ccc';
-  copyBtn.style.borderRadius = '3px';
-  copyBtn.style.cursor = 'pointer';
-  copyBtn.style.marginTop = '5px';
-  copyBtn.style.color = '#333'; // コピーボタンのテキスト色
+  applyStyles(copyBtn, styles.copyBtn);
   copyBtn.onclick = () => {
     navigator.clipboard.writeText(translatedText)
       .then(() => {
@@ -131,9 +181,7 @@ function showTranslationPopup(translatedText) {
 // ポップアップ外のクリックでポップアップを閉じる
 function closePopupOnClickOutside(event) {
   if (translationPopup && !translationPopup.contains(event.target)) {
-    document.body.removeChild(translationPopup);
-    translationPopup = null;
-    document.removeEventListener('click', closePopupOnClickOutside);
+    removePopup();
   }
 }
 
@@ -148,7 +196,6 @@ function addTranslateButtonToTweets() {
   console.log('Twitter/X.comページを検出しました。翻訳ボタンを追加します。');
 
   // ツイート要素を見つけるためのセレクタ
-  // 注意: Twitterのセレクタは変更される可能性があるため、定期的に確認が必要
   const tweetSelector = 'article[data-testid="tweet"]';
 
   // 既存のツイートに翻訳ボタンを追加
@@ -202,18 +249,6 @@ function addButtonToTweet(tweetElement) {
     return;
   }
 
-  // 翻訳ボタンを作成
-  const translateButton = document.createElement('div');
-  translateButton.className = 'llm-translate-button';
-  translateButton.style.display = 'flex';
-  translateButton.style.alignItems = 'center';
-  translateButton.style.cursor = 'pointer';
-  translateButton.style.color = 'rgb(83, 100, 113)';
-  translateButton.style.padding = '0 12px';
-  translateButton.style.fontSize = '13px';
-  translateButton.setAttribute('role', 'button');
-  translateButton.setAttribute('aria-label', '日本語翻訳');
-  
   // スピナーのスタイルを定義
   const spinnerStyle = `
     @keyframes rotate {
@@ -226,10 +261,25 @@ function addButtonToTweet(tweetElement) {
     }
   `;
   
-  // スタイル要素を作成して追加
-  const styleElement = document.createElement('style');
-  styleElement.textContent = spinnerStyle;
-  document.head.appendChild(styleElement);
+  // スタイル要素を作成して追加（まだ追加されていない場合のみ）
+  if (!document.querySelector('#llm-translator-styles')) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'llm-translator-styles';
+    styleElement.textContent = spinnerStyle;
+    document.head.appendChild(styleElement);
+  }
+
+  // 翻訳ボタンを作成
+  const translateButton = document.createElement('div');
+  translateButton.className = 'llm-translate-button';
+  translateButton.style.display = 'flex';
+  translateButton.style.alignItems = 'center';
+  translateButton.style.cursor = 'pointer';
+  translateButton.style.color = 'rgb(83, 100, 113)';
+  translateButton.style.padding = '0 12px';
+  translateButton.style.fontSize = '13px';
+  translateButton.setAttribute('role', 'button');
+  translateButton.setAttribute('aria-label', '日本語翻訳');
   
   // 通常アイコン（「あ」の文字を使用した独自デザイン）とローディングスピナーを含むHTML
   translateButton.innerHTML = `
@@ -311,20 +361,11 @@ function showTweetTranslation(tweetElement, tweetTextElement, translatedText) {
   // 翻訳結果の要素を作成
   const translationElement = document.createElement('div');
   translationElement.className = 'llm-tweet-translation';
-  translationElement.style.marginTop = '8px';
-  translationElement.style.padding = '8px 12px';
-  translationElement.style.backgroundColor = '#46627e';
-  translationElement.style.borderRadius = '8px';
-  translationElement.style.fontSize = '14px';
-  translationElement.style.color = '#FFF';
-  translationElement.style.whiteSpace = 'pre-wrap';
-  translationElement.style.wordBreak = 'break-word';
-  translationElement.style.lineHeight = '1.4';
+  applyStyles(translationElement, styles.tweetTranslation);
 
   // エラーメッセージかどうかをチェック
   if (translatedText.includes('翻訳エラー')) {
-    translationElement.style.backgroundColor = '#fff0f0';
-    translationElement.style.color = '#d32f2f';
+    applyStyles(translationElement, styles.tweetTranslationError);
   }
 
   translationElement.textContent = translatedText;
