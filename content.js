@@ -96,7 +96,14 @@ function removePopup() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'showTranslation') {
     showTranslationPopup(message.translatedText);
+  } else if (message.action === 'getSelectedText') {
+    // 選択されたテキストを取得してバックグラウンドスクリプトに返す
+    const selectedText = window.getSelection().toString().trim();
+    sendResponse({ selectedText: selectedText });
   }
+  
+  // 非同期レスポンスを示すためにtrueを返す
+  return true;
 });
 
 // 翻訳結果ポップアップの表示

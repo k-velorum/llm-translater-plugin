@@ -59,6 +59,61 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
+// キーボードショートカットのイベントハンドラ
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'translate-selection') {
+    console.log('翻訳ショートカットが押されました');
+    
+    try {
+      // アクティブなタブを取得
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) {
+        console.error('アクティブなタブが見つかりません');
+        return;
+      }
+      
+      // コンテンツスクリプトに選択テキストの取得を要求
+      chrome.tabs.sendMessage(tab.id, { action: 'getSelectedText' }, async (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('コンテンツスクリプトとの通信エラー:', chrome.runtime.lastError);
+          return;
+        }
+        
+        if (!response || !response.selectedText) {
+          console.log('選択されたテキストがありません');
+          return;
+        }
+        
+        const selectedText = response.selectedText;
+        console.log('選択テキスト:', selectedText);
+        
+        // 設定を読み込み
+        const settings = await loadSettings();
+        
+        try {
+          // テキストを翻訳
+          const translatedText = await translateText(selectedText, settings);
+          
+          // 翻訳結果をコンテンツスクリプトに送信
+          await chrome.tabs.sendMessage(tab.id, {
+            action: 'showTranslation',
+            translatedText: translatedText
+          });
+        } catch (error) {
+          console.error('翻訳エラー:', error);
+          const errorDetails = formatErrorDetails(error, settings);
+          await chrome.tabs.sendMessage(tab.id, {
+            action: 'showTranslation',
+            translatedText: errorDetails
+          });
+        }
+      });
+    } catch (error) {
+      console.error('ショートカット処理エラー:', error);
+    }
+  }
+});
+
 // エラー詳細のフォーマット
 function formatErrorDetails(error, settings) {
   const maskApiKey = (apiKey) => {
