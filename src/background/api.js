@@ -1,59 +1,34 @@
 import { DEFAULT_SETTINGS } from './settings.js';
 
 // APIリクエスト共通処理
-async function makeApiRequest(url, options, errorMessage, timeout = 30000) {
+async function makeApiRequest(url, options, errorMessage) {
   try {
-    // タイムアウト処理を追加
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(url, options);
+    console.log(`レスポンスステータス: ${response.status} ${response.statusText}`);
     
-    // AbortControllerのsignalをfetchに渡す
-    const fetchOptions = {
-      ...options,
-      signal: controller.signal
-    };
-    
-    try {
-      const response = await fetch(url, fetchOptions);
-      // タイムアウトをクリア
-      clearTimeout(timeoutId);
-      
-      console.log(`レスポンスステータス: ${response.status} ${response.statusText}`);
-      
-      if (!response.ok) {
-        let errorText = '';
+    if (!response.ok) {
+      let errorText = '';
+      try {
+        const errorData = await response.json();
+        errorText = JSON.stringify(errorData);
+        console.error('エラーレスポンス:', errorData);
+        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+      } catch (parseError) {
         try {
-          const errorData = await response.json();
-          errorText = JSON.stringify(errorData);
-          console.error('エラーレスポンス:', errorData);
-          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
-        } catch (parseError) {
-          try {
-            errorText = await response.text();
-            console.error('エラーテキスト:', errorText);
-          } catch (textError) {
-            errorText = 'レスポンステキストを取得できませんでした';
-          }
-          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+          errorText = await response.text();
+          console.error('エラーテキスト:', errorText);
+        } catch (textError) {
+          errorText = 'レスポンステキストを取得できませんでした';
         }
+        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
       }
-      
-      const data = await response.json();
-      console.log('成功レスポンス:', JSON.stringify(data, null, 2));
-      return data;
-    } catch (fetchError) {
-      // タイムアウトをクリア（エラー発生時も）
-      clearTimeout(timeoutId);
-      throw fetchError;
     }
+    
+    const data = await response.json();
+    console.log('成功レスポンス:', JSON.stringify(data, null, 2));
+    return data;
   } catch (error) {
     console.error(`${errorMessage}:`, error);
-    
-    // AbortErrorの場合はタイムアウトエラーとして処理
-    if (error.name === 'AbortError') {
-      throw new Error(`タイムアウトエラー: APIリクエストが${timeout / 1000}秒以内に完了しませんでした。`);
-    }
-    
     throw error;
   }
 }
@@ -156,62 +131,36 @@ async function translateWithGemini(text, settings) {
   if (!settings.geminiApiKey) {
     throw new Error('Gemini APIキーが設定されていません');
   }
-  
-  // APIリクエストのタイムアウト時間を設定（ミリ秒）
-  const timeout = 60000; // 60秒
-  
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiApiKey}`;
   console.log(`Gemini API リクエスト開始: ${apiUrl.replace(settings.geminiApiKey, '***API_KEY***')}`);
-  console.log(`使用モデル: ${settings.geminiModel}`);
   
   try {
-    // リクエストボディを作成
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            {
-              text: `以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。\n\n${text}`
-            }
-          ]
-        }
-      ],
-      generationConfig: { temperature: 0.2 }
-    };
-    
-    console.log('Gemini リクエストボディ:', JSON.stringify(requestBody, null, 2));
-    
-    // タイムアウト付きでAPIリクエストを実行
     const data = await makeApiRequest(
       apiUrl,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。\n\n${text}`
+                }
+              ]
+            }
+          ],
+          generationConfig: { temperature: 0.2 }
+        })
       },
-      'Gemini API リクエスト中にエラーが発生',
-      timeout
+      'Gemini API リクエスト中にエラーが発生'
     );
-    
-    // レスポンスの検証
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
-      console.error('Gemini APIから予期しない形式のレスポンスを受信:', data);
-      throw new Error('Gemini APIから予期しない形式のレスポンスを受信しました');
-    }
     
     return data.candidates[0].content.parts[0].text.trim();
   } catch (error) {
-    console.error('Gemini API エラー詳細:', error);
-    
-    if (error.name === 'AbortError') {
-      throw new Error(`Gemini APIリクエストがタイムアウトしました（${timeout / 1000}秒）。再度お試しください。`);
-    }
-    
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
       throw new Error('ネットワーク接続エラー: Gemini APIに接続できません。インターネット接続を確認してください。');
     }
-    
-    // その他のエラーはそのまま再スロー
     throw error;
   }
 }
