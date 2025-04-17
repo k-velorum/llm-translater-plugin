@@ -37,6 +37,24 @@ async function setupContextMenu() {
         });
     });
 
+    // ページ全体翻訳メニューを作成
+    await new Promise((resolve, reject) => {
+        chrome.contextMenus.create({
+          id: 'translate-page',
+          title: 'LLMページ全体翻訳',
+          contexts: ['page']
+        }, () => {
+            if (chrome.runtime.lastError) {
+                const errorMessage = chrome.runtime.lastError.message || '詳細不明のエラー';
+                console.error('ページ全体翻訳メニュー作成エラー:', errorMessage);
+                reject(new Error(errorMessage));
+            } else {
+                console.log('ページ全体翻訳メニューが作成されました。');
+                resolve();
+            }
+        });
+    });
+
   } catch (error) {
     // create で reject された場合やその他の予期せぬエラー
     console.error('コンテキストメニュー設定中に予期せぬエラー:', error);
@@ -45,6 +63,22 @@ async function setupContextMenu() {
 
 // コンテキストメニュークリック時の処理
 async function handleContextMenuClick(info, tab) {
+  if (info.menuItemId === 'translate-page') {
+    console.log('ページ全体翻訳リクエストを受信');
+    const settings = await loadSettings();
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageTexts' });
+      const pageTexts = response.texts;
+      const separator = '[[[SEP]]]';
+      const joinedText = pageTexts.join(separator);
+      const translatedJoined = await translateText(joinedText, settings);
+      const translatedArray = translatedJoined.split(separator);
+      await chrome.tabs.sendMessage(tab.id, { action: 'applyPageTranslation', translations: translatedArray });
+    } catch (error) {
+      console.error('ページ全体翻訳エラー:', error);
+    }
+    return;
+  }
   if (info.menuItemId === 'translate-with-llm' && info.selectionText) {
     const selectedText = info.selectionText;
     console.log('コンテキストメニューから翻訳:', selectedText);

@@ -104,6 +104,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ selectedText: selectedText });
     // sendResponse を非同期で呼ぶ可能性があるので true を返す
     return true;
+  } else if (message.action === 'getPageTexts') {
+    // ページ内のテキストノードを取得してバックグラウンドに返す
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: node => {
+        if (!node.parentNode) return NodeFilter.FILTER_REJECT;
+        const tag = node.parentNode.nodeName;
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME'].includes(tag)) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const texts = [];
+    let node;
+    while (node = walker.nextNode()) {
+      texts.push(node.nodeValue);
+    }
+    sendResponse({ texts: texts });
+    return true;
+  } else if (message.action === 'applyPageTranslation') {
+    // バックグラウンドから受け取った翻訳結果をページ内のテキストノードに適用
+    const translations = message.translations;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: node => {
+        if (!node.parentNode) return NodeFilter.FILTER_REJECT;
+        const tag = node.parentNode.nodeName;
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME'].includes(tag)) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    let index = 0;
+    let textNode;
+    while (textNode = walker.nextNode()) {
+      if (translations[index] !== undefined) {
+        textNode.nodeValue = translations[index];
+      }
+      index++;
+    }
+    return;
   }
   // 他のメッセージタイプは処理しないので false を返す
   return false;

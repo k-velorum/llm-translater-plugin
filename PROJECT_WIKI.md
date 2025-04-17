@@ -8,6 +8,7 @@
 
 *   **テキスト選択翻訳:** ウェブページ上の任意のテキストを選択し、右クリックメニューまたはキーボードショートカット (`Ctrl+Shift+T` / `Command+Shift+T`) で翻訳を実行できます。
 *   **Twitter/X.com 翻訳:** Twitter/X.comのツイートの下部に表示される翻訳ボタンをクリックすることで、ツイート内容を翻訳します。
+*   **ページ全体翻訳:** ページを右クリックして「LLMページ全体翻訳」を選ぶと、ページ内のテキストノードを収集し、一括で翻訳してページ上に置き換えて表示します。
 *   **複数LLMプロバイダー対応:** OpenRouter API, Google Gemini API, Anthropic API のいずれかを選択して利用できます。
 *   **モデル選択:** 各APIプロバイダーが提供するモデルの中から、好みのモデルを選択できます（OpenRouterとAnthropicでは動的にモデル一覧を取得）。
 *   **設定画面:** 拡張機能のアイコンからアクセスできるポップアップ画面で、APIキー、使用モデル、中間サーバー設定などを構成できます。
@@ -64,10 +65,10 @@
 *   Chrome拡張機能の主要なイベントリスナーを登録し、それぞれのハンドラ関数を定義します。
 *   **`registerEventListeners`**: このモジュールのメイン関数。以下のリスナーを登録します。
     *   `chrome.runtime.onInstalled`: 拡張機能のインストール時または更新時に実行されます。`initializeDefaultSettings` (設定初期化) と `setupContextMenu` (コンテキストメニュー作成) を呼び出します。
-    *   `chrome.contextMenus.onClicked`: コンテキストメニュー (`LLM翻訳`) がクリックされた際の処理 (`handleContextMenuClick`) を実行します。選択テキストを取得し、翻訳を実行して結果を `content.js` に送信します。
+    *   `chrome.contextMenus.onClicked`: コンテキストメニュー (`LLM翻訳`, `LLMページ全体翻訳`) がクリックされた際の処理 (`handleContextMenuClick`) を実行します。選択テキストまたはページ全体翻訳を識別し、それぞれの処理を行います。
     *   `chrome.commands.onCommand`: キーボードショートカット (`translate-selection`) が押された際の処理 (`handleCommand`) を実行します。アクティブタブの `content.js` から選択テキストを取得し、翻訳を実行して結果を `content.js` に送信します。
-*   **`setupContextMenu`**: コンテキストメニューを作成します。既存のメニューがあれば削除してから再作成します。
-*   **`handleContextMenuClick`**: コンテキストメニュークリック時の非同期処理。
+*   **`setupContextMenu`**: コンテキストメニューを作成します。選択テキスト用(`LLM翻訳`)とページ全体翻訳用(`LLMページ全体翻訳`)の2つを生成し、既存のメニューがあれば削除してから再作成します。
+*   **`handleContextMenuClick`**: コンテキストメニュークリック時の非同期処理。`menuItemId`を判別し、選択テキスト翻訳またはページ全体翻訳の処理を実行します。
 *   **`handleCommand`**: キーボードショートカット実行時の非同期処理。
 
 #### 3.1.3. `src/background/message-handlers.js`
@@ -104,8 +105,10 @@
 アクティブなウェブページに挿入され、DOM操作やユーザーインタラクションを担当します。
 
 *   **メッセージリスナー (`chrome.runtime.onMessage`)**:
-    *   `showTranslation`: バックグラウンドから翻訳結果（またはエラーメッセージ）を受け取り、`showTranslationPopup` を呼び出して表示します。
-    *   `getSelectedText`: バックグラウンドからの要求に応じて、現在の選択テキスト (`window.getSelection()`) を取得して返します。
+*   `showTranslation`: バックグラウンドから翻訳結果（またはエラーメッセージ）を受け取り、`showTranslationPopup` を呼び出して表示します。
+*   `getSelectedText`: バックグラウンドからの要求に応じて、現在の選択テキスト (`window.getSelection()`) を取得して返します。
+*   `getPageTexts`: ページ内のテキストノードを収集し、バックグラウンドスクリプトに返します。
+*   `applyPageTranslation`: バックグラウンドから受け取った翻訳結果をページ内のテキストノードに適用します。
 *   **翻訳ポップアップ (`showTranslationPopup`, `removePopup`, `closePopupOnClickOutside`)**:
     *   選択されたテキストの近くに翻訳結果を表示するDOM要素を作成・挿入します。
     *   ポップアップにはヘッダー（タイトル、閉じるボタン）、翻訳内容、コピーボタンが含まれます。
