@@ -18,16 +18,16 @@
 
 本拡張機能はChrome Manifest V3に基づいて構築されており、以下の主要コンポーネントで構成されています。
 
-*   **`manifest.json`**: 拡張機能の基本的な設定ファイル。パーミッション、バックグラウンドスクリプト、コンテンツスクリプト、ポップアップUI、アイコンなどを定義します。
-*   **`background.js`**: バックグラウンドで動作するサービスワーカー。
-    *   拡張機能の初期化（コンテキストメニュー作成など）。
-    *   コンテキストメニューやキーボードショートカットからのイベントを処理。
-    *   選択されたテキストを受け取り、設定に基づいて適切なLLM API（OpenRouter, Gemini, Anthropic）を呼び出して翻訳を実行。
-    *   APIリクエストは、設定に応じて直接または中間サーバー経由で行われる。
-    *   コンテンツスクリプトやポップアップからのメッセージを処理（ツイート翻訳リクエスト、APIテスト、APIキー検証、モデル一覧取得など）。
+*   **`manifest.json`**: 拡張機能の基本的な設定ファイル。パーミッション、バックグラウンドスクリプト (`"type": "module"` を指定)、コンテンツスクリプト、ポップアップUI、アイコンなどを定義します。
+*   **`background.js`**: バックグラウンドで動作するサービスワーカーのエントリーポイント。各バックグラウンドモジュールをインポートし、初期化処理（イベントリスナー登録など）を行います。
+*   **`src/background/`**: バックグラウンド処理のコアロジックを格納するディレクトリ。
+    *   **`api.js`**: LLM API (OpenRouter, Gemini, Anthropic) へのリクエスト送信、レスポンス処理、エラーフォーマットを担当します。中間サーバー経由と直接アクセスのロジックを含みます。
+    *   **`message-handlers.js`**: `content.js` や `popup.js` からのメッセージ (`chrome.runtime.onMessage`) を受け取り、対応する処理（翻訳実行、APIテスト、キー検証、モデル取得など）を呼び出します。
+    *   **`settings.js`**: 設定 (`chrome.storage.sync`) の読み込みとデフォルト設定の初期化を担当します。
+    *   **`event-listeners.js`**: Chrome拡張機能のイベント (`onInstalled`, `contextMenus.onClicked`, `commands.onCommand`) のリスナー登録と、イベント発生時の処理を担当します。
 *   **`content.js`**: ウェブページ上で動作するスクリプト。
-    *   ユーザーがテキストを選択した際に、バックグラウンドスクリプトからの要求に応じて選択テキストを送信。
-    *   バックグラウンドスクリプトから受け取った翻訳結果をポップアップで表示。ポップアップにはコピーボタンも含まれる。
+    *   ユーザーがテキストを選択した際に、バックグラウンドスクリプトからの要求 (`getSelectedText`) に応じて選択テキストを送信。
+    *   バックグラウンドスクリプトから受け取った翻訳結果 (`showTranslation`) をポップアップで表示。ポップアップにはコピーボタンも含まれる。
     *   Twitter/X.com のページを検出し、各ツイートに翻訳ボタンを動的に追加 (`MutationObserver` を使用)。
     *   ツイート翻訳ボタンがクリックされた際に、ツイートテキストをバックグラウンドスクリプトに送信し、返された翻訳結果をツイートの下に表示。
 *   **`popup.html`**: 拡張機能アイコンクリック時に表示される設定画面のHTML構造。タブ（設定、テスト、詳細設定）、APIプロバイダー選択、APIキー入力欄、モデル選択ドロップダウン（Select2を使用）、テスト用テキストエリア、中間サーバー設定などが含まれる。
@@ -48,30 +48,56 @@
 
 ## 3. 主要スクリプト詳細
 
-### 3.1. `background.js`
+### 3.1. バックグラウンドスクリプト (`src/background/`)
 
-サービスワーカーとして動作し、拡張機能の中核的なロジックを担当します。
+バックグラウンド処理は、役割ごとに以下のモジュールに分割されています。エントリーポイントはルートディレクトリの `background.js` です。
 
-*   **初期化 (`chrome.runtime.onInstalled`)**:
-    *   デフォルト設定を `chrome.storage.sync` に保存します。
-    *   テキスト選択時に表示されるコンテキストメニュー (`LLM翻訳`) を作成します。
-*   **イベントリスナー**:
-    *   `chrome.contextMenus.onClicked`: コンテキストメニューがクリックされた際の処理。選択テキストを取得し、`translateText` を呼び出して翻訳を実行し、結果を `content.js` に送信して表示させます。
-    *   `chrome.commands.onCommand`: キーボードショートカット (`translate-selection`) が押された際の処理。アクティブタブの `content.js` にメッセージを送り、選択テキストを取得してから翻訳を実行し、結果を表示させます。
-    *   `chrome.runtime.onMessage`: `content.js` や `popup.js` からのメッセージを処理します。
-        *   `translateTweet`: `content.js` からのツイート翻訳リクエスト。
-        *   `testTranslate`: `popup.js` からのAPIテストリクエスト。
-        *   `verify[Provider]ApiKey`: `popup.js` からのAPIキー検証リクエスト。
-        *   `get[Provider]Models`: `popup.js` からのモデル一覧取得リクエスト。
-*   **設定管理 (`loadSettings`)**: `chrome.storage.sync` から設定を非同期に読み込みます。
-*   **翻訳処理 (`translateText`, `translateWith[Provider]`)**:
-    *   設定されたAPIプロバイダーに応じて、対応する翻訳関数 (`translateWithOpenRouter`, `translateWithGemini`, `translateWithAnthropic`) を呼び出します。
-    *   各翻訳関数は、設定 (`settings`) に基づいてAPIリクエストのパラメータ（APIキー、モデル名、プロンプトなど）を構築します。
-    *   中間サーバー利用 (`useProxyServer`) が有効な場合、ローカルの中間サーバー (`docker/server.js`) の対応するエンドポイントにリクエストを送信します。
-    *   中間サーバー利用が無効な場合、各LLMプロバイダーの公式APIエンドポイントに直接リクエストを試みます。
-    *   直接アクセス時に `fetch` が失敗した場合（CORSエラーの可能性）、自動的に中間サーバー経由でのリクエストにフォールバックします（OpenRouterとAnthropicのみ）。
-*   **APIリクエスト (`makeApiRequest`)**: `fetch` APIを使用してAPIリクエストを実行する共通関数。レスポンスステータスを確認し、エラーレスポンスの場合は詳細なエラー情報を抽出して例外をスローします。
-*   **エラーハンドリング (`formatErrorDetails`)**: APIエラー発生時に、ユーザーフレンドリーなエラーメッセージ（APIプロバイダー、モデル名、マスクされたAPIキー、エラー詳細を含む）を生成します。
+#### 3.1.1. `background.js` (エントリーポイント)
+
+*   サービスワーカーの起動時に最初に実行されます。
+*   `src/background/` ディレクトリ内の各モジュール (`message-handlers.js`, `event-listeners.js`) をインポートします。
+*   `registerEventListeners` を呼び出して、拡張機能のイベントリスナーを登録します。
+*   `chrome.runtime.onMessage` リスナーを登録し、受信したメッセージを `handleBackgroundMessage` に渡して処理させます。
+
+#### 3.1.2. `src/background/event-listeners.js`
+
+*   Chrome拡張機能の主要なイベントリスナーを登録し、それぞれのハンドラ関数を定義します。
+*   **`registerEventListeners`**: このモジュールのメイン関数。以下のリスナーを登録します。
+    *   `chrome.runtime.onInstalled`: 拡張機能のインストール時または更新時に実行されます。`initializeDefaultSettings` (設定初期化) と `setupContextMenu` (コンテキストメニュー作成) を呼び出します。
+    *   `chrome.contextMenus.onClicked`: コンテキストメニュー (`LLM翻訳`) がクリックされた際の処理 (`handleContextMenuClick`) を実行します。選択テキストを取得し、翻訳を実行して結果を `content.js` に送信します。
+    *   `chrome.commands.onCommand`: キーボードショートカット (`translate-selection`) が押された際の処理 (`handleCommand`) を実行します。アクティブタブの `content.js` から選択テキストを取得し、翻訳を実行して結果を `content.js` に送信します。
+*   **`setupContextMenu`**: コンテキストメニューを作成します。既存のメニューがあれば削除してから再作成します。
+*   **`handleContextMenuClick`**: コンテキストメニュークリック時の非同期処理。
+*   **`handleCommand`**: キーボードショートカット実行時の非同期処理。
+
+#### 3.1.3. `src/background/message-handlers.js`
+
+*   `content.js` や `popup.js` から `chrome.runtime.sendMessage` で送信されたメッセージを処理します。
+*   **`handleBackgroundMessage`**: メインのメッセージハンドラ関数。メッセージの `action` プロパティに基づいて処理を分岐します。非同期処理を行う場合は `true` を返す必要があります。
+    *   `translateTweet`: `content.js` からのツイート翻訳リクエスト。`loadSettings` で設定を読み込み、`translateText` を呼び出して翻訳を実行し、結果を返します。
+    *   `testTranslate`: `popup.js` からのAPIテストリクエスト。現在の設定とテスト用の設定をマージし、`translateText` を呼び出して翻訳を実行し、結果を返します。
+    *   `verify[Provider]ApiKey`: `popup.js` からのAPIキー検証リクエスト。`handleApiRequest` を呼び出して検証処理を行います。
+    *   `get[Provider]Models`: `popup.js` からのモデル一覧取得リクエスト。`handleModelListRequest` を呼び出してモデル一覧を取得します。
+*   **`handleApiRequest`, `handleProxyRequest`, `handleDirectRequest`, `handleModelListRequest`**: APIキー検証やモデル一覧取得のためのヘルパー関数。設定 (`useProxyServer`) に応じて中間サーバー経由または直接APIアクセスを使い分けます。
+
+#### 3.1.4. `src/background/api.js`
+
+*   LLM APIとの通信に関するコアロジックを実装します。
+*   **`DEFAULT_SETTINGS`**: APIキーやモデル名などのデフォルト設定値をエクスポートします。
+*   **`translateText`**: 翻訳処理のメイン関数。設定された `apiProvider` に基づいて、適切な翻訳関数 (`translateWithOpenRouter`, `translateWithGemini`, `translateWithAnthropic`) を呼び出します。
+*   **`translateWith[Provider]`**: 各APIプロバイダー固有の翻訳処理。
+    *   APIキーの存在チェック。
+    *   APIリクエストに必要なパラメータ（プロンプト、モデル名など）を構築。
+    *   `makeApiRequest` を呼び出してAPIリクエストを実行。
+    *   中間サーバー利用が無効で直接アクセスが失敗した場合（CORSエラー等）、自動的に中間サーバー経由でのリクエストにフォールバックするロジックを含みます (OpenRouter, Anthropic)。
+*   **`makeApiRequest`**: `fetch` APIを使用してAPIリクエストを実行する共通の非同期関数。レスポンスステータスを確認し、エラーレスポンスの場合は詳細なエラー情報を抽出して例外をスローします。
+*   **`formatErrorDetails`**: APIエラー発生時に、ユーザーフレンドリーなエラーメッセージ（APIプロバイダー、モデル名、マスクされたAPIキー、エラー詳細を含む）を生成します。
+
+#### 3.1.5. `src/background/settings.js`
+
+*   拡張機能の設定管理を担当します。
+*   **`loadSettings`**: `chrome.storage.sync` から設定を非同期に読み込みます。`DEFAULT_SETTINGS` を利用して、未設定の項目にはデフォルト値を適用します。
+*   **`initializeDefaultSettings`**: 拡張機能のインストール/更新時に呼び出され、既存の設定を保持しつつ、未設定の項目にデフォルト値を設定します。
 
 ### 3.2. `content.js`
 
