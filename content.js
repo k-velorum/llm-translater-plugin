@@ -349,50 +349,44 @@ function addButtonToTweet(tweetElement) {
 
   // 翻訳ボタンのクリックイベント
   translateButton.addEventListener('click', () => {
-    // ツイートのテキストを取得
-    const tweetText = tweetTextElement.textContent;
-
+    // ツイート本文と引用ツイートのテキスト要素を取得
+    const tweetTextElements = tweetElement.querySelectorAll('[data-testid="tweetText"]');
     // 既に翻訳結果が表示されている場合は削除
-    const existingTranslation = tweetElement.querySelector('.llm-tweet-translation');
-    if (existingTranslation) {
-      existingTranslation.remove();
+    const anyExisting = Array.from(tweetTextElements).some(el => {
+      const next = el.nextSibling;
+      return next && next.classList && next.classList.contains('llm-tweet-translation');
+    });
+    if (anyExisting) {
+      tweetTextElements.forEach(el => {
+        const next = el.nextSibling;
+        if (next && next.classList && next.classList.contains('llm-tweet-translation')) {
+          next.remove();
+        }
+      });
       translateButton.style.color = 'rgb(83, 100, 113)';
       return;
     }
-
     // ローディング状態を表示
     translateButton.style.color = '#1DA1F2';
     translateIcon.style.display = 'none';
     spinner.style.display = 'block';
-
-    // バックグラウンドスクリプトに翻訳リクエストを送信
-    chrome.runtime.sendMessage(
-      {
-        action: 'translateTweet',
-        text: tweetText
-      },
-      (response) => {
-        // ボタンの状態を元に戻す
-        translateButton.style.color = 'rgb(83, 100, 113)';
-        translateIcon.style.display = 'block';
-        spinner.style.display = 'none';
-
-        if (chrome.runtime.lastError) {
-          console.error('翻訳リクエストエラー:', chrome.runtime.lastError);
-          showTweetTranslation(tweetElement, tweetTextElement, `翻訳エラー: ${chrome.runtime.lastError.message}`);
-          return;
+    // 翻訳リクエストを一括送信
+    let pending = tweetTextElements.length;
+    tweetTextElements.forEach(el => {
+      const text = el.textContent;
+      chrome.runtime.sendMessage(
+        { action: 'translateTweet', text },
+        (response) => {
+          showTweetTranslation(tweetElement, el, response.error ? `翻訳エラー: ${response.error.message || '不明なエラー'}` : response.translatedText);
+          pending -= 1;
+          if (pending === 0) {
+            translateButton.style.color = 'rgb(83, 100, 113)';
+            translateIcon.style.display = 'block';
+            spinner.style.display = 'none';
+          }
         }
-
-        if (response.error) {
-          console.error('翻訳エラー:', response.error);
-          showTweetTranslation(tweetElement, tweetTextElement, `翻訳エラー: ${response.error.message || '不明なエラー'}`);
-          return;
-        }
-
-        // 翻訳結果を表示
-        showTweetTranslation(tweetElement, tweetTextElement, response.translatedText);
-      }
-    );
+      );
+    });
   });
 
   // アクションバーに翻訳ボタンを追加
@@ -401,10 +395,10 @@ function addButtonToTweet(tweetElement) {
 
 // ツイートの下に翻訳結果を表示する関数
 function showTweetTranslation(tweetElement, tweetTextElement, translatedText) {
-  // 既に翻訳結果が表示されている場合は削除
-  const existingTranslation = tweetElement.querySelector('.llm-tweet-translation');
-  if (existingTranslation) {
-    existingTranslation.remove();
+  // 既にこのツイートの翻訳結果が表示されている場合は削除
+  const next = tweetTextElement.nextSibling;
+  if (next && next.classList && next.classList.contains('llm-tweet-translation')) {
+    next.remove();
   }
 
   // 翻訳結果の要素を作成
