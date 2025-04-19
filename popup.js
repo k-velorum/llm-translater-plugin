@@ -23,8 +23,8 @@ function initSelect2(elements) {
     });
     
     // モデル選択時の処理
-    $('#openrouter-model, #anthropic-model').on('select2:select', function(e) {
-      const provider = this.id.split('-')[0]; // openrouter または anthropic
+    $('#openrouter-model, #anthropic-model, #gemini-model').on('select2:select', function(e) {
+      const provider = this.id.split('-')[0]; // openrouter, gemini または anthropic
       const modelId = e.params.data.id;
       const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
       if (modelData) {
@@ -79,6 +79,11 @@ function updateModelInfo(provider, modelData) {
     if (modelData.pricing && modelData.pricing.completion) {
       infoText += `<br>出力料金: $${modelData.pricing.completion} / 1M tokens`;
     }
+  } else if (provider === 'gemini') {
+    infoText = `モデル: ${modelData.name}`;
+    if (modelData.context_length) {
+      infoText += `<br>入力上限: ${modelData.context_length} tokens`;
+    }
   } else if (provider === 'anthropic') {
     infoText = `モデル: ${modelData.name || modelData.id}`;
     if (modelData.context_window) {
@@ -94,8 +99,7 @@ function updateModelInfo(provider, modelData) {
 
 // モデル一覧の読み込み
 function loadModels(elements) {
-  loadProviderModels('openrouter', elements);
-  loadProviderModels('anthropic', elements);
+  ['openrouter', 'gemini', 'anthropic'].forEach(p => loadProviderModels(p, elements));
 }
 
 // 特定プロバイダーのモデル一覧を読み込む
@@ -145,6 +149,9 @@ async function fetchModels(provider, apiKey) {
       if (apiKey) {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
+    } else if (provider === 'gemini') {
+      url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      // Gemini はヘッダー不要
     } else if (provider === 'anthropic') {
       url = 'https://api.anthropic.com/v1/models';
       headers['x-api-key'] = apiKey;
@@ -158,7 +165,18 @@ async function fetchModels(provider, apiKey) {
     
     if (response.ok) {
       const data = await response.json();
-      return provider === 'openrouter' ? data.data || [] : data.models || [];
+      if (provider === 'openrouter') {
+        return data.data || [];
+      } else if (provider === 'gemini') {
+        const modelsArr = data.models || [];
+        return modelsArr.map(m => ({
+          id: m.name.replace('models/', ''),     // translateWithGemini() と整合
+          name: m.displayName || m.name,
+          context_length: m.inputTokenLimit
+        }));
+      } else {
+        return data.models || [];
+      }
     }
     
     // 直接フェッチが失敗した場合、バックグラウンド経由で試行
@@ -339,6 +357,7 @@ function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSe
 
 function createVerificationUI(elements) {
   createProviderVerificationUI('openrouter', elements.openrouterApiKeyInput);
+  createProviderVerificationUI('gemini', elements.geminiApiKeyInput);
   createProviderVerificationUI('anthropic', elements.anthropicApiKeyInput);
 }
 
@@ -393,6 +412,8 @@ function bindEventHandlers(elements) {
     anthropicModelSelect,
     openrouterApiKeyInput,
     openrouterModelSelect,
+    geminiApiKeyInput,
+    geminiModelSelect,
     testProxyButton,
     saveAdvancedButton
   } = elements;
@@ -424,6 +445,9 @@ function bindEventHandlers(elements) {
   
   openrouterApiKeyInput.addEventListener('change', () => 
     apiKeyChangeHandler('openrouter', openrouterApiKeyInput, openrouterModelSelect));
+    
+  geminiApiKeyInput.addEventListener('change', () => 
+    apiKeyChangeHandler('gemini', geminiApiKeyInput, geminiModelSelect));
 }
 
 // 中間サーバー接続テスト
