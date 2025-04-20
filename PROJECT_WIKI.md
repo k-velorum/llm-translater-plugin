@@ -10,7 +10,7 @@
 *   **Twitter/X.com 翻訳:** Twitter/X.comのツイートの下部に表示される翻訳ボタンをクリックすることで、ツイート内容を翻訳します。
 *   **ページ全体翻訳:** ページを右クリックして「LLMページ全体翻訳」を選ぶと、ページ内のテキストノードを収集し、一括で翻訳してページ上に置き換えて表示します。
 *   **複数LLMプロバイダー対応:** OpenRouter API, Google Gemini API, Anthropic API のいずれかを選択して利用できます。
-*   **モデル選択:** 各APIプロバイダーが提供するモデルの中から、好みのモデルを選択できます（OpenRouterとAnthropicでは動的にモデル一覧を取得）。
+*   **モデル選択:** 各APIプロバイダーが提供するモデルの中から、好みのモデルを選択できます（OpenRouter, Gemini, Anthropicのいずれも、APIキーが設定されていれば動的にモデル一覧を取得）。
 *   **設定画面:** 拡張機能のアイコンからアクセスできるポップアップ画面で、APIキー、使用モデル、中間サーバー設定などを構成できます。
 *   **APIテスト機能:** 設定画面から、選択したAPIプロバイダーとの接続をテストできます。
 *   **中間サーバー:** ブラウザのCORS制約を回避するため、OpenRouterおよびAnthropic APIへのリクエストをプロキシするローカルサーバー（Dockerで実行）を利用するオプションがあります。
@@ -35,7 +35,7 @@
 *   **`popup.js`**: 設定画面 (`popup.html`) の動作を制御するJavaScript。
     *   設定の読み込みと保存 (`chrome.storage.sync`)。
     *   APIプロバイダーの選択に応じて表示セクションを切り替え。
-    *   OpenRouterおよびAnthropicのモデル一覧をAPIから動的に取得し、Select2ドロップダウンに表示。
+    *   OpenRouter, Gemini, Anthropic のモデル一覧をAPIから動的に取得し、Select2ドロップダウンに表示（GeminiとAnthropicはAPIキーが必須）。
     *   APIキー検証機能。
     *   APIテスト機能（指定したテキストを翻訳）。
     *   中間サーバー設定の管理と接続テスト。
@@ -138,7 +138,7 @@
     *   `saveAdvancedSettings`: 「詳細設定」タブのフォーム要素（中間サーバーURL、利用有無）を保存します。
 *   **モデル選択 (Select2連携) (`initSelect2`, `loadModels`, `fetchModels`, `populateModelSelect`, `setDefaultModels`, `updateModelInfo`, `formatModelOption`)**:
     *   jQueryとSelect2ライブラリを使用して、OpenRouterとAnthropicのモデル選択ドロップダウンを初期化します。
-    *   `loadModels`: 設定されたAPIキーを使用して、バックグラウンド経由 (`fetchModelsViaBackground`) または直接APIアクセス (`fetchModels`) でモデル一覧を取得します。APIキーがない場合や取得失敗時はデフォルトモデル (`setDefaultModels`) を使用します。OpenRouterはAPIキーなしでも公開モデル一覧を取得できます。
+    *   `loadModels`: 設定されたAPIキーを使用して、モデル一覧を取得します。OpenRouterはAPIキーなしでも公開モデル一覧を取得できますが、GeminiとAnthropicはAPIキーが必須です。`popup.js` はまず直接APIアクセス (`fetchModels`) を試み、CORSエラーなどで失敗した場合にバックグラウンドスクリプト経由 (`fetchModelsViaBackground`) での取得にフォールバックします（中間サーバー利用時も含む）。取得失敗時はデフォルトモデル (`setDefaultModels`) を使用します。
     *   `populateModelSelect`: 取得したモデル一覧でドロップダウンのオプションを動的に生成・更新します。各オプションにはモデルの詳細情報が `data-model` 属性として格納されます。
     *   `updateModelInfo`: モデルが選択された際に、モデル名、コンテキスト長、料金などの詳細情報をドロップダウンの下に表示します。
     *   `formatModelOption`: Select2のドロップダウン表示をカスタマイズします。
@@ -146,7 +146,7 @@
     *   各APIキー入力欄の隣に「APIキーを検証」ボタンとステータス表示欄を動的に作成します。
     *   検証ボタンクリック時に、入力されたAPIキーを使用して、バックグラウンド経由 (`verifyApiKeyViaBackground`) または直接APIアクセス (`verifyApiKey`) で実際にAPI（モデル一覧取得など）を呼び出し、キーの有効性を確認します。
     *   検証結果（成功/失敗/検証中）をステータス欄に表示します。
-    *   検証成功時には、そのAPIキーでモデル一覧も再取得・更新します。
+    *   検証成功時には、そのAPIキーで対象プロバイダー（OpenRouter, Gemini, Anthropic）のモデル一覧も再取得・更新します。
 *   **APIテスト (`testApi`)**:
     *   「テスト」タブで選択されたAPIプロバイダー、モデル、入力テキストを使用して、バックグラウンドに `testTranslate` メッセージを送信し、翻訳を実行します。
     *   実行結果（翻訳テキストまたはエラーメッセージ）を結果表示エリアに表示します。
