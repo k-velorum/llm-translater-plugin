@@ -1,5 +1,61 @@
 document.addEventListener('DOMContentLoaded', init);
 
+// 共通ユーティリティ関数
+const PopupUtils = {
+  // APIキー変更ハンドラーを作成
+  createApiKeyChangeHandler(provider, apiKeyInput, modelSelect) {
+    return async () => {
+      const apiKey = apiKeyInput.value.trim();
+      if (apiKey) {
+        try {
+          const models = await fetchModels(provider, apiKey);
+          populateModelSelect(provider, modelSelect, models);
+        } catch (error) {
+          console.error('APIキー変更時のモデル一覧取得エラー:', error);
+        }
+      }
+    };
+  },
+
+  // モデル選択復元処理
+  restoreModelSelection(provider, modelSelect, modelValue) {
+    if (!modelValue) return;
+    
+    setTimeout(() => {
+      if (Array.from(modelSelect.options).some(opt => opt.value === modelValue)) {
+        modelSelect.value = modelValue;
+        
+        // Select2の更新
+        if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+          $(modelSelect).trigger('change');
+          
+          // モデル情報を更新
+          const modelData = $(modelSelect).find(`option[value="${modelValue}"]`).data('model');
+          if (modelData) {
+            updateModelInfo(provider, modelData);
+          }
+        }
+      }
+    }, 500); // モデル一覧の読み込み完了を待つための遅延
+  },
+
+  // APIキーのバリデーションとエラーメッセージを取得
+  validateApiKey(apiProvider, settings) {
+    const validationRules = {
+      openrouter: { key: 'openrouterApiKey', message: 'OpenRouter APIキーを入力してください' },
+      gemini: { key: 'geminiApiKey', message: 'Gemini APIキーを入力してください' },
+      anthropic: { key: 'anthropicApiKey', message: 'Anthropic APIキーを入力してください' }
+    };
+    
+    const rule = validationRules[apiProvider];
+    if (rule && !settings[rule.key]) {
+      return { isValid: false, message: rule.message };
+    }
+    
+    return { isValid: true, message: '' };
+  }
+};
+
 function init() {
   const elements = getElements();
   initTabs(elements);
@@ -428,26 +484,14 @@ function bindEventHandlers(elements) {
   testProxyButton.addEventListener('click', () => testProxyServer(elements));
   
   // APIキーが変更されたときにモデル一覧を更新
-  const apiKeyChangeHandler = async (provider, apiKeyInput, modelSelect) => {
-    const apiKey = apiKeyInput.value.trim();
-    if (apiKey) {
-      try {
-        const models = await fetchModels(provider, apiKey);
-        populateModelSelect(provider, modelSelect, models);
-      } catch (error) {
-        console.error('APIキー変更時のモデル一覧取得エラー:', error);
-      }
-    }
-  };
+  anthropicApiKeyInput.addEventListener('change', 
+    PopupUtils.createApiKeyChangeHandler('anthropic', anthropicApiKeyInput, anthropicModelSelect));
   
-  anthropicApiKeyInput.addEventListener('change', () => 
-    apiKeyChangeHandler('anthropic', anthropicApiKeyInput, anthropicModelSelect));
-  
-  openrouterApiKeyInput.addEventListener('change', () => 
-    apiKeyChangeHandler('openrouter', openrouterApiKeyInput, openrouterModelSelect));
+  openrouterApiKeyInput.addEventListener('change', 
+    PopupUtils.createApiKeyChangeHandler('openrouter', openrouterApiKeyInput, openrouterModelSelect));
     
-  geminiApiKeyInput.addEventListener('change', () => 
-    apiKeyChangeHandler('gemini', geminiApiKeyInput, geminiModelSelect));
+  geminiApiKeyInput.addEventListener('change', 
+    PopupUtils.createApiKeyChangeHandler('gemini', geminiApiKeyInput, geminiModelSelect));
 }
 
 // 中間サーバー接続テスト
@@ -642,30 +686,9 @@ function loadSettings({
       // 選択されたプロバイダーのセクションを表示する
       sections[settings.apiProvider].classList.remove('hidden');
       
-      // モデルの選択状態は、モデル一覧が取得された後に設定される
-      const restoreModelSelection = (provider, modelSelect, modelValue) => {
-        if (modelValue) {
-          setTimeout(() => {
-            if (Array.from(modelSelect.options).some(opt => opt.value === modelValue)) {
-              modelSelect.value = modelValue;
-              
-              // Select2の更新
-              if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-                $(modelSelect).trigger('change');
-                
-                // モデル情報を更新
-                const modelData = $(modelSelect).find(`option[value="${modelValue}"]`).data('model');
-                if (modelData) {
-                  updateModelInfo(provider, modelData);
-                }
-              }
-            }
-          }, 500); // モデル一覧の読み込み完了を待つための遅延
-        }
-      };
-      
-      restoreModelSelection('openrouter', openrouterModelSelect, settings.openrouterModel);
-      restoreModelSelection('anthropic', anthropicModelSelect, settings.anthropicModel);
+      // モデルの選択状態を復元
+      PopupUtils.restoreModelSelection('openrouter', openrouterModelSelect, settings.openrouterModel);
+      PopupUtils.restoreModelSelection('anthropic', anthropicModelSelect, settings.anthropicModel);
     }
   );
 }
@@ -682,22 +705,10 @@ function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterMode
     anthropicModel: anthropicModelSelect.value
   };
 
-  let isValid = true;
-  let errorMessage = '';
+  const validation = PopupUtils.validateApiKey(settings.apiProvider, settings);
   
-  if (settings.apiProvider === 'openrouter' && !settings.openrouterApiKey) {
-    isValid = false;
-    errorMessage = 'OpenRouter APIキーを入力してください';
-  } else if (settings.apiProvider === 'gemini' && !settings.geminiApiKey) {
-    isValid = false;
-    errorMessage = 'Gemini APIキーを入力してください';
-  } else if (settings.apiProvider === 'anthropic' && !settings.anthropicApiKey) {
-    isValid = false;
-    errorMessage = 'Anthropic APIキーを入力してください';
-  }
-  
-  if (!isValid) {
-    showStatus(statusMessage, errorMessage, false);
+  if (!validation.isValid) {
+    showStatus(statusMessage, validation.message, false);
     return;
   }
   

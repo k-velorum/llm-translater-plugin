@@ -1,6 +1,46 @@
 // 翻訳結果を表示するためのポップアップ要素
 let translationPopup = null;
 
+// 共通ユーティリティ関数
+const DOMUtils = {
+  // テキストノードを取得するTreeWalkerを作成
+  createTextNodeWalker(rootNode) {
+    return document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, {
+      acceptNode: node => {
+        if (!node.parentNode) return NodeFilter.FILTER_REJECT;
+        const tag = node.parentNode.nodeName;
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME'].includes(tag)) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+  },
+
+  // TreeWalkerを使ってテキストノードを配列で取得
+  getTextNodes(rootNode) {
+    const walker = this.createTextNodeWalker(rootNode);
+    const nodes = [];
+    let node;
+    while (node = walker.nextNode()) {
+      nodes.push(node);
+    }
+    return nodes;
+  },
+
+  // テキストノードの値のみを配列で取得
+  getTextValues(rootNode) {
+    return this.getTextNodes(rootNode).map(node => node.nodeValue);
+  }
+};
+
+// エラー検出ユーティリティ
+const ErrorUtils = {
+  // 翻訳エラーかどうかを判定
+  isTranslationError(text) {
+    return text.includes('==== 翻訳エラー ====') || text.includes('翻訳エラー');
+  }
+};
+
 // スタイル定義
 const styles = {
   popup: {
@@ -106,42 +146,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   } else if (message.action === 'getPageTexts') {
     // ページ内のテキストノードを取得してバックグラウンドに返す
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode: node => {
-        if (!node.parentNode) return NodeFilter.FILTER_REJECT;
-        const tag = node.parentNode.nodeName;
-        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME'].includes(tag)) return NodeFilter.FILTER_REJECT;
-        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    const texts = [];
-    let node;
-    while (node = walker.nextNode()) {
-      texts.push(node.nodeValue);
-    }
+    const texts = DOMUtils.getTextValues(document.body);
     sendResponse({ texts: texts });
     return true;
   } else if (message.action === 'applyPageTranslation') {
     // バックグラウンドから受け取った翻訳結果をページ内のテキストノードに適用
     const translations = message.translations;
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode: node => {
-        if (!node.parentNode) return NodeFilter.FILTER_REJECT;
-        const tag = node.parentNode.nodeName;
-        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME'].includes(tag)) return NodeFilter.FILTER_REJECT;
-        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+    const textNodes = DOMUtils.getTextNodes(document.body);
+    textNodes.forEach((node, index) => {
+      if (translations[index] !== undefined) {
+        node.nodeValue = translations[index];
       }
     });
-    let index = 0;
-    let textNode;
-    while (textNode = walker.nextNode()) {
-      if (translations[index] !== undefined) {
-        textNode.nodeValue = translations[index];
-      }
-      index++;
-    }
     return;
   }
   // 他のメッセージタイプは処理しないので false を返す
@@ -188,7 +204,7 @@ function showTranslationPopup(translatedText) {
   applyStyles(content, styles.content);
   
   // エラーメッセージかどうかをチェック
-  const isError = translatedText.includes('==== 翻訳エラー ====');
+  const isError = ErrorUtils.isTranslationError(translatedText);
   
   if (isError) {
     applyStyles(content, styles.errorContent);
@@ -407,7 +423,7 @@ function showTweetTranslation(tweetElement, tweetTextElement, translatedText) {
   applyStyles(translationElement, styles.tweetTranslation);
 
   // エラーメッセージかどうかをチェック
-  if (translatedText.includes('翻訳エラー')) {
+  if (ErrorUtils.isTranslationError(translatedText)) {
     applyStyles(translationElement, styles.tweetTranslationError);
   }
 

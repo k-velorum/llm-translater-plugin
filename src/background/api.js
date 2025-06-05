@@ -11,6 +11,23 @@ export const DEFAULT_SETTINGS = {
   useProxyServer: false
 };
 
+// 共通ユーティリティ関数
+const ApiUtils = {
+  // CORSエラーのフォールバック処理
+  async handleCorsError(error, translationFunction, text, settings) {
+    // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
+      
+      // 一時的に中間サーバーを利用する設定に変更
+      const tempSettings = { ...settings, useProxyServer: true };
+      return await translationFunction(text, tempSettings);
+    }
+    
+    throw error;
+  }
+};
+
 // エラー詳細のフォーマット
 export function formatErrorDetails(error, settings) {
   const maskApiKey = (apiKey) => {
@@ -147,16 +164,7 @@ async function translateWithOpenRouter(text, settings) {
 
       return data.choices[0].message.content.trim();
     } catch (error) {
-      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
-
-        // 一時的に中間サーバーを利用する設定に変更
-        const tempSettings = { ...settings, useProxyServer: true };
-        return await translateWithOpenRouter(text, tempSettings);
-      }
-
-      throw error;
+      return await ApiUtils.handleCorsError(error, translateWithOpenRouter, text, settings);
     }
   }
 }
@@ -268,16 +276,7 @@ async function translateWithAnthropic(text, settings) {
 
       return data.content[0].text.trim();
     } catch (error) {
-      // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
-
-        // 一時的に中間サーバーを利用する設定に変更
-        const tempSettings = { ...settings, useProxyServer: true };
-        return await translateWithAnthropic(text, tempSettings);
-      }
-
-      throw error;
+      return await ApiUtils.handleCorsError(error, translateWithAnthropic, text, settings);
     }
   }
 }
