@@ -165,7 +165,7 @@ function loadProviderModels(provider, elements) {
         const models = await fetchModels(provider, { server });
         populateModelSelect(provider, modelSelect, models);
       } catch (error) {
-        console.error('Ollamaモデル一覧の取得に失敗:', error);
+        console.warn('Ollamaモデル一覧の取得に失敗:', error);
         // 失敗時は空のまま
       }
     });
@@ -180,7 +180,7 @@ function loadProviderModels(provider, elements) {
         const models = await fetchModels(provider, { server, apiKey });
         populateModelSelect(provider, modelSelect, models);
       } catch (error) {
-        console.error('LM Studioモデル一覧の取得に失敗:', error);
+        console.warn('LM Studioモデル一覧の取得に失敗:', error);
         // 失敗時は空のまま
       }
     });
@@ -221,7 +221,12 @@ async function fetchModels(provider, options) {
   try {
     return await fetchModelsViaBackground(provider, options);
   } catch (error) {
-    console.error(`${provider}モデル取得エラー:`, error);
+    const isLocal = provider === 'ollama' || provider === 'lmstudio';
+    if (isLocal) {
+      console.warn(`${provider}モデル取得エラー:`, error);
+    } else {
+      console.error(`${provider}モデル取得エラー:`, error);
+    }
     throw error;
   }
 }
