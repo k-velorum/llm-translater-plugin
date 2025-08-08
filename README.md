@@ -1,14 +1,16 @@
 # LLM翻訳プラグイン
 
-Google Chrome用の拡張機能で、選択したテキストをLLM（大規模言語モデル）を使用して翻訳します。OpenRouterまたはGoogle Gemini APIを利用して翻訳機能を提供します。
+Google Chrome用の拡張機能で、選択したテキストをLLM（大規模言語モデル）を使用して翻訳します。OpenRouter、Google Gemini API、Ollama、LM Studioを利用して翻訳機能を提供します。
 
 ## 機能
 
 - 任意のウェブページでテキストを選択し、右クリックメニューから「LLM翻訳」を選択すると翻訳されます
 - 翻訳結果はポップアップで表示され、結果をコピーすることができます
 - 複数のLLMプロバイダーをサポート：
-  - OpenRouter API (GPT-3.5/4, Claude, Llamaなど複数のモデルにアクセス可能)
+  - OpenRouter API (GPT-4, Claude, Llamaなど複数のモデルにアクセス可能)
   - Google Gemini API
+  - Ollama (ローカルLLM)
+  - LM Studio (OpenAI互換ローカルサーバー)
 - モデル選択やAPIキーの設定が可能
 - Twitter/X.comのツイート翻訳機能
 
@@ -57,10 +59,12 @@ Google Chrome用の拡張機能で、選択したテキストをLLM（大規模�
 ### 初期設定
 
 1. Chromeツールバーの拡張機能アイコンをクリックして設定を開きます
-2. 使用したいAPIプロバイダーを選択します（OpenRouterまたはGoogle Gemini）
-3. APIキーを入力します：
-   - OpenRouter API：[OpenRouter](https://openrouter.ai/)でアカウント作成後、APIキーを取得
-   - Google Gemini API：[Google AI Studio](https://aistudio.google.com/)でAPIキーを取得
+2. 使用したいAPIプロバイダーを選択します（OpenRouter、Google Gemini、Ollama、LM Studio）
+3. 選択したプロバイダーに応じて設定を行います：
+   - **OpenRouter API**：[OpenRouter](https://openrouter.ai/)でアカウント作成後、APIキーを取得
+   - **Google Gemini API**：[Google AI Studio](https://aistudio.google.com/)でAPIキーを取得
+   - **Ollama**：[Ollama](https://ollama.ai/)をインストールし、ローカルサーバーを起動（デフォルト: http://localhost:11434）
+   - **LM Studio**：[LM Studio](https://lmstudio.ai/)をインストールし、サーバーを起動（デフォルト: http://localhost:1234）
 4. お好みのモデルを選択します
 5. 「設定を保存」をクリックします
 
@@ -82,24 +86,14 @@ Google Chrome用の拡張機能で、選択したテキストをLLM（大規模�
 - APIキーはお使いのブラウザのローカルストレージにのみ保存され、開発者には送信されません
 - 選択したテキストは翻訳のためにのみAPIに送信され、他の目的では使用されません
 - すべての通信はHTTPS経由で安全に行われます
-- 中間サーバーはローカルで実行され、外部からアクセスできないようになっています
+- ローカルLLM（Ollama、LM Studio）を使用する場合、データは外部に送信されません
 
 ## 技術情報
 
 - Manifest V3に準拠したChrome拡張機能
-- OpenRouter API、Google Gemini APIに対応
-
-## 中間サーバーの技術詳細
-
-中間サーバーは以下の技術を使用しています：
-
-- Node.js: サーバーサイドJavaScript実行環境
-- Express: Webアプリケーションフレームワーク
-
-中間サーバーは以下のエンドポイントを提供します：
-
-
-- `/health`: サーバーのヘルスチェック
+- OpenRouter API、Google Gemini API、Ollama、LM Studioに対応
+- ES Modules対応のバックグラウンドスクリプト
+- jQuery 3.7.1 + Select2 4.0.13を使用したUI
 
 ## 免責事項
 

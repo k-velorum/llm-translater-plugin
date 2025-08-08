@@ -63,6 +63,59 @@
 - Default: gemini-1.5-flash
 - Filter: Only models supporting `generateContent` method
 
+## Ollama (Local LLM)
+### Endpoints
+- **Generate**: `http://localhost:11434/api/generate`
+- **Models List**: `http://localhost:11434/api/tags`
+
+### Request Structure
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: selectedModel,
+    prompt: `${TRANSLATE_PROMPT}\n\nテキスト：\n${textToTranslate}`,
+    stream: false
+  })
+}
+```
+
+### Available Models
+- Dynamic fetching from local server
+- No authentication required
+
+## LM Studio (OpenAI Compatible)
+### Endpoints
+- **Chat Completions**: `http://localhost:1234/v1/chat/completions`
+- **Models List**: `http://localhost:1234/v1/models`
+
+### Request Structure
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Authorization': apiKey ? `Bearer ${apiKey}` : undefined,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: selectedModel,
+    messages: [
+      { role: 'system', content: TRANSLATE_PROMPT },
+      { role: 'user', content: textToTranslate }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000
+  })
+}
+```
+
+### Available Models
+- Dynamic fetching from local server
+- Optional API key authentication
+
 ## Common Translation Prompt
 ```javascript
 const TRANSLATE_PROMPT = `あなたは翻訳者です。以下のテキストを日本語に翻訳してください。
@@ -78,8 +131,11 @@ const TRANSLATE_PROMPT = `あなたは翻訳者です。以下のテキストを
 - API errors: Provider-specific error messages
 - Rate limits: "APIリクエスト制限に達しました"
 - Invalid API key: "APIキーが無効です"
+- Local server not running: Logged as warning (servers may not always be running)
 
 ## Validation Methods
 - **OpenRouter**: GET request to `/models` endpoint
 - **Gemini**: GET request to `/models` with API key
-- Both validate through background script message handlers
+- **Ollama**: GET request to `/api/tags` endpoint
+- **LM Studio**: GET request to `/v1/models` endpoint
+- All validate through background script message handlers
