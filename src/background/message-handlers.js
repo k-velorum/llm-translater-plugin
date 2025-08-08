@@ -95,7 +95,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
   }
 
   // OpenRouter APIキー検証リクエストの処理
-  if (message.action === 'verifyOpenRouterApiKey') {
+  if (message.action === 'verifyOpenrouterApiKey') {
     loadSettings().then(settings => {
       handleApiRequest(
         'OpenRouter APIキー検証',
@@ -124,7 +124,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
   // Anthropic は削除済み
 
   // OpenRouterモデル一覧取得リクエストの処理
-  if (message.action === 'getOpenRouterModels') {
+  if (message.action === 'getOpenrouterModels') {
     loadSettings().then(settings => {
       const key = message.apiKey || settings.openrouterApiKey;
       const headers = {
