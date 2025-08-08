@@ -47,7 +47,6 @@ async function setupContextMenu() {
                 console.error('コンテキストメニュー作成エラー:', errorMessage);
                 reject(new Error(errorMessage)); // Errorオブジェクトでrejectする
             } else {
-                console.log('コンテキストメニューが作成されました。');
                 resolve();
             }
         });
@@ -65,7 +64,6 @@ async function setupContextMenu() {
                 console.error('ページ全体翻訳メニュー作成エラー:', errorMessage);
                 reject(new Error(errorMessage));
             } else {
-                console.log('ページ全体翻訳メニューが作成されました。');
                 resolve();
             }
         });

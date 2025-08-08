@@ -5,10 +5,7 @@ export const DEFAULT_SETTINGS = {
   openrouterModel: 'openai/gpt-4o-mini',
   geminiApiKey: '',
   geminiModel: 'gemini-flash-2.0',
-  anthropicApiKey: '',
-  anthropicModel: 'claude-3-5-haiku-20241022',
-  proxyServerUrl: 'http://localhost:3000',
-  useProxyServer: false
+  // Anthropic / プロキシ機能は削除済み
 };
 
 // 設定の読み込み
@@ -39,12 +36,6 @@ export function initializeDefaultSettings() {
   // 既存の設定を尊重しつつ、未設定の項目にデフォルト値を設定する
   chrome.storage.sync.get(null, (existingSettings) => {
      const mergedSettings = { ...DEFAULT_SETTINGS, ...existingSettings };
-     chrome.storage.sync.set(mergedSettings, () => {
-       if (chrome.runtime.lastError) {
-         console.error('デフォルト設定の保存中にエラー:', chrome.runtime.lastError);
-       } else {
-         console.log('デフォルト設定が初期化/更新されました:', mergedSettings);
-       }
-     });
+     chrome.storage.sync.set(mergedSettings);
   });
 }

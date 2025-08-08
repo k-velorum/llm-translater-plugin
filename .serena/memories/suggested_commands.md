@@ -17,31 +17,33 @@ convert icons/icon.svg -resize 48x48 icons/icon48.png
 convert icons/icon.svg -resize 128x128 icons/icon128.png
 ```
 
-## Proxy Server
-```bash
-# Start proxy server with Docker
-cd docker
-docker-compose up -d
-
-# Stop proxy server
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Development mode (with nodemon)
-cd docker
-npm install
-npm run dev
-```
-
 ## Chrome Extension Installation
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
 4. Select the project directory
+5. Note the extension ID for debugging
 
-## Git Commands (macOS/Darwin)
+## Testing the Extension
+1. Load extension in Chrome
+2. Test text selection translation on any webpage
+3. Visit Twitter/X.com to test tweet translation
+4. Check console for errors (F12 → Console)
+5. Test API connections via popup settings
+
+## Debugging
+```bash
+# View background script logs
+# Chrome: chrome://extensions/ → Details → Inspect views: service worker
+
+# Content script logs
+# Open DevTools on any webpage (F12) → Console
+
+# Reload extension
+# chrome://extensions/ → Click reload icon
+```
+
+## Git Commands
 ```bash
 # Check status
 git status
@@ -56,7 +58,7 @@ git commit -m "message"
 git log --oneline -10
 ```
 
-## System Utilities (macOS/Darwin)
+## File Search & Navigation
 ```bash
 # List files
 ls -la
@@ -67,21 +69,20 @@ find . -name "*.js"
 # Search in files (case-insensitive)
 grep -r -i "pattern" .
 
-# Open in default editor
-open filename
-
-# Check port usage
-lsof -i :3000
+# Check file structure
+tree -I 'node_modules|lib' -L 2
 ```
 
-## Testing the Extension
-1. Load extension in Chrome
-2. Test text selection translation on any webpage
-3. Visit Twitter/X.com to test tweet translation
-4. Check console for errors (F12 → Console)
-5. Test API connections via popup settings
+## API Testing (Direct)
+```bash
+# Test OpenRouter API
+curl -X POST https://openrouter.ai/api/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
 
-## API Endpoints (Proxy Server)
-- Health check: `curl http://localhost:3000/health`
-- Verify OpenRouter: `curl -X POST http://localhost:3000/api/verify/openrouter -H "Content-Type: application/json" -d '{"apiKey":"YOUR_KEY"}'`
-- Verify Anthropic: `curl -X POST http://localhost:3000/api/verify/anthropic -H "Content-Type: application/json" -d '{"apiKey":"YOUR_KEY"}'`
+# Test Gemini API
+curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
+```

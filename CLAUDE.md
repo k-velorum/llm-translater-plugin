@@ -52,7 +52,7 @@ No exceptions.
 `initial_instructions` / `get_current_config` / `switch_modes`: For cases where the client cannot pass a system prompt, or when you want to switch modes.
 ## Project Overview
 
-This is a Chrome browser extension (Manifest V3) that translates selected text and Twitter/X.com tweets using Large Language Models (LLMs). The extension supports multiple LLM providers: OpenRouter API, Google Gemini API, and Anthropic API.
+This is a Chrome browser extension (Manifest V3) that translates selected text and Twitter/X.com tweets using Large Language Models (LLMs). The extension supports multiple LLM providers: OpenRouter API and Google Gemini API.
 
 ## Development Setup
 
@@ -76,22 +76,6 @@ convert icons/icon.svg -resize 48x48 icons/icon48.png
 convert icons/icon.svg -resize 128x128 icons/icon128.png
 ```
 
-### Proxy Server Setup
-For OpenRouter and Anthropic APIs (CORS workaround):
-
-```bash
-cd docker
-docker-compose up -d
-```
-
-Server runs on `http://localhost:3000` with endpoints:
-- `/api/openrouter` - OpenRouter API proxy
-- `/api/anthropic` - Anthropic API proxy  
-- `/api/verify/openrouter` - OpenRouter API key verification
-- `/api/verify/anthropic` - Anthropic API key verification
-- `/api/models/anthropic` - Anthropic models list
-- `/health` - Health check
-
 ## Architecture
 
 ### Code Structure
@@ -106,20 +90,19 @@ Server runs on `http://localhost:3000` with endpoints:
   - Twitter/X.com tweet translation buttons
   - Page-wide translation functionality
 - **`popup.js`** - Settings UI logic with jQuery/Select2 for model selection
-- **`docker/server.js`** - Express proxy server for CORS bypass
 
 ### Key Features
 - **Text Selection Translation**: Right-click context menu + keyboard shortcut (Ctrl+Shift+T / Cmd+Shift+T)
 - **Twitter Integration**: Auto-injected translation buttons on tweets using MutationObserver
 - **Page Translation**: Full page text node translation via context menu
-- **Multi-provider Support**: Dynamic model loading from OpenRouter, Gemini, Anthropic APIs
+- **Multi-provider Support**: Dynamic model loading from OpenRouter, Gemini APIs
 - **Settings Management**: chrome.storage.sync with fallback defaults and validation
-- **CORS Workaround**: Automatic fallback from direct API calls to proxy server for OpenRouter/Anthropic
+- **CORS Workaround**: Direct API calls for supported providers
 
 ### Message Flow
 1. Content script → Background script via `chrome.runtime.sendMessage`
 2. Background script processes via `message-handlers.js`
-3. API calls through `api.js` with automatic proxy fallback
+3. API calls through `api.js`
 4. Results returned to content script for UI display
 
 ## Development Notes
@@ -130,4 +113,3 @@ Server runs on `http://localhost:3000` with endpoints:
 - Twitter integration uses MutationObserver for dynamic content
 - Select2 library used for enhanced model selection dropdowns
 - API key validation includes live testing against actual endpoints
-- Automatic retry logic: direct API → proxy server on CORS failure

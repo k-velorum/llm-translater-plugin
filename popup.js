@@ -44,7 +44,7 @@ const PopupUtils = {
     const validationRules = {
       openrouter: { key: 'openrouterApiKey', message: 'OpenRouter APIキーを入力してください' },
       gemini: { key: 'geminiApiKey', message: 'Gemini APIキーを入力してください' },
-      anthropic: { key: 'anthropicApiKey', message: 'Anthropic APIキーを入力してください' }
+
     };
     
     const rule = validationRules[apiProvider];
@@ -79,8 +79,8 @@ function initSelect2(elements) {
     });
     
     // モデル選択時の処理
-    $('#openrouter-model, #anthropic-model, #gemini-model').on('select2:select', function(e) {
-      const provider = this.id.split('-')[0]; // openrouter, gemini または anthropic
+    $('#openrouter-model, #gemini-model').on('select2:select', function(e) {
+      const provider = this.id.split('-')[0]; // openrouter または gemini
       const modelId = e.params.data.id;
       const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
       if (modelData) {
@@ -140,14 +140,6 @@ function updateModelInfo(provider, modelData) {
     if (modelData.context_length) {
       infoText += `<br>入力上限: ${modelData.context_length} tokens`;
     }
-  } else if (provider === 'anthropic') {
-    infoText = `モデル: ${modelData.name || modelData.id}`;
-    if (modelData.context_window) {
-      infoText += `<br>コンテキスト長: ${modelData.context_window}`;
-    }
-    if (modelData.description) {
-      infoText += `<br>${modelData.description}`;
-    }
   }
   
   infoElement.innerHTML = infoText;
@@ -155,7 +147,7 @@ function updateModelInfo(provider, modelData) {
 
 // モデル一覧の読み込み
 function loadModels(elements) {
-  ['openrouter', 'gemini', 'anthropic'].forEach(p => loadProviderModels(p, elements));
+  ['openrouter', 'gemini'].forEach(p => loadProviderModels(p, elements));
 }
 
 // 特定プロバイダーのモデル一覧を読み込む
@@ -272,10 +264,7 @@ function setDefaultModels(provider, selectElement) {
       { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku' },
       { id: 'anthropic/claude-3.7-sonnet', name: 'Claude 3.7 Sonnet' }
     ],
-    anthropic: [
-      { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet' },
-      { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }
-    ]
+
   };
   
   // 現在選択されているモデルを保存
@@ -285,7 +274,8 @@ function setDefaultModels(provider, selectElement) {
   selectElement.innerHTML = '';
   
   // デフォルトモデルでオプションを生成
-  defaultModels[provider].forEach(model => {
+  if (defaultModels[provider]) {
+    defaultModels[provider].forEach(model => {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.name;
@@ -295,6 +285,7 @@ function setDefaultModels(provider, selectElement) {
     
     selectElement.appendChild(option);
   });
+  }
   
   // 前回選択していたモデルがあれば選択状態を復元
   if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
@@ -313,13 +304,10 @@ function getElements() {
     apiProviderSelect: document.getElementById('api-provider'),
     openrouterSection: document.getElementById('openrouter-section'),
     geminiSection: document.getElementById('gemini-section'),
-    anthropicSection: document.getElementById('anthropic-section'),
     openrouterApiKeyInput: document.getElementById('openrouter-api-key'),
     openrouterModelSelect: document.getElementById('openrouter-model'),
     geminiApiKeyInput: document.getElementById('gemini-api-key'),
     geminiModelSelect: document.getElementById('gemini-model'),
-    anthropicApiKeyInput: document.getElementById('anthropic-api-key'),
-    anthropicModelSelect: document.getElementById('anthropic-model'),
     saveButton: document.getElementById('save-button'),
     statusMessage: document.getElementById('status-message'),
     // テスト用要素
@@ -328,12 +316,6 @@ function getElements() {
     testButton: document.getElementById('test-button'),
     testStatus: document.getElementById('test-status'),
     testResult: document.getElementById('test-result'),
-    // 詳細設定用要素
-    proxyServerUrlInput: document.getElementById('proxy-server-url'),
-    useProxyServerCheckbox: document.getElementById('use-proxy-server'),
-    testProxyButton: document.getElementById('test-proxy-button'),
-    proxyStatus: document.getElementById('proxy-status'),
-    saveAdvancedButton: document.getElementById('save-advanced-button'),
     // タブ用要素
     tabs: document.querySelectorAll('.tab'),
     tabContents: document.querySelectorAll('.tab-content')
@@ -353,13 +335,9 @@ function initTabs({ tabs, tabContents }) {
   });
 }
 
-function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection, anthropicSection }) {
+function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection }) {
   apiProviderSelect.addEventListener('change', () => {
-    const sections = {
-      openrouter: openrouterSection,
-      gemini: geminiSection,
-      anthropic: anthropicSection
-    };
+    const sections = { openrouter: openrouterSection, gemini: geminiSection };
     
     // すべてのセクションを非表示にする
     Object.values(sections).forEach(section => section.classList.add('hidden'));
@@ -372,7 +350,6 @@ function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSe
 function createVerificationUI(elements) {
   createProviderVerificationUI('openrouter', elements.openrouterApiKeyInput);
   createProviderVerificationUI('gemini', elements.geminiApiKeyInput);
-  createProviderVerificationUI('anthropic', elements.anthropicApiKeyInput);
 }
 
 // APIキー検証UI作成の共通関数
@@ -419,84 +396,17 @@ function createProviderVerificationUI(provider, apiKeyInput) {
 }
 
 function bindEventHandlers(elements) {
-  const { 
-    saveButton, 
-    testButton, 
-    anthropicApiKeyInput, 
-    anthropicModelSelect,
-    openrouterApiKeyInput,
-    openrouterModelSelect,
-    geminiApiKeyInput,
-    geminiModelSelect,
-    testProxyButton,
-    saveAdvancedButton
-  } = elements;
+  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect } = elements;
   
   saveButton.addEventListener('click', () => saveSettings(elements));
   testButton.addEventListener('click', () => testApi(elements));
   
-  // 詳細設定の保存ボタン
-  saveAdvancedButton.addEventListener('click', () => saveAdvancedSettings(elements));
-  
-  // 中間サーバー接続テストボタン
-  testProxyButton.addEventListener('click', () => testProxyServer(elements));
-  
   // APIキーが変更されたときにモデル一覧を更新
-  anthropicApiKeyInput.addEventListener('change', 
-    PopupUtils.createApiKeyChangeHandler('anthropic', anthropicApiKeyInput, anthropicModelSelect));
-  
   openrouterApiKeyInput.addEventListener('change', 
     PopupUtils.createApiKeyChangeHandler('openrouter', openrouterApiKeyInput, openrouterModelSelect));
     
   geminiApiKeyInput.addEventListener('change', 
     PopupUtils.createApiKeyChangeHandler('gemini', geminiApiKeyInput, geminiModelSelect));
-}
-
-// 中間サーバー接続テスト
-async function testProxyServer(elements) {
-  const { proxyServerUrlInput, proxyStatus } = elements;
-  const proxyUrl = proxyServerUrlInput.value.trim();
-  
-  if (!proxyUrl) {
-    showStatus(proxyStatus, '中間サーバーURLを入力してください', false);
-    return;
-  }
-  
-  showStatus(proxyStatus, '接続テスト中...', true);
-  
-  try {
-    const response = await fetch(`${proxyUrl}/health`, {
-      method: 'GET'
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.status === 'ok') {
-        showStatus(proxyStatus, '✓ 中間サーバーに接続できました', true);
-      } else {
-        showStatus(proxyStatus, `✗ 中間サーバーからの応答が不正: ${JSON.stringify(data)}`, false);
-      }
-    } else {
-      showStatus(proxyStatus, `✗ 中間サーバーに接続できません: ${response.status} ${response.statusText}`, false);
-    }
-  } catch (error) {
-    console.error('中間サーバー接続テストエラー:', error);
-    showStatus(proxyStatus, `✗ 中間サーバーに接続できません: ${error.message}`, false);
-  }
-}
-
-// 詳細設定の保存
-function saveAdvancedSettings(elements) {
-  const { proxyServerUrlInput, useProxyServerCheckbox, proxyStatus } = elements;
-  const proxyServerUrl = proxyServerUrlInput.value.trim();
-  const useProxyServer = useProxyServerCheckbox.checked;
-  
-  chrome.storage.sync.set({ 
-    proxyServerUrl,
-    useProxyServer
-  }, () => {
-    showStatus(proxyStatus, '詳細設定を保存しました', true);
-  });
 }
 
 // APIキー検証処理（常にバックグラウンド経由）
@@ -557,13 +467,8 @@ function loadSettings({
   openrouterModelSelect, 
   geminiApiKeyInput, 
   geminiModelSelect, 
-  anthropicApiKeyInput, 
-  anthropicModelSelect, 
   openrouterSection, 
-  geminiSection, 
-  anthropicSection,
-  proxyServerUrlInput,
-  useProxyServerCheckbox
+  geminiSection
 }) {
   chrome.storage.sync.get(
     null,
@@ -573,15 +478,11 @@ function loadSettings({
       openrouterModelSelect.value = settings.openrouterModel;
       geminiApiKeyInput.value = settings.geminiApiKey;
       geminiModelSelect.value = settings.geminiModel;
-      anthropicApiKeyInput.value = settings.anthropicApiKey;
-      proxyServerUrlInput.value = settings.proxyServerUrl;
-      useProxyServerCheckbox.checked = settings.useProxyServer;
       
       // APIプロバイダーに応じたセクションの表示制御
       const sections = {
         openrouter: openrouterSection,
-        gemini: geminiSection,
-        anthropic: anthropicSection
+        gemini: geminiSection
       };
       
       // すべてのセクションを非表示にする
@@ -592,21 +493,18 @@ function loadSettings({
       
       // モデルの選択状態を復元
       PopupUtils.restoreModelSelection('openrouter', openrouterModelSelect, settings.openrouterModel);
-      PopupUtils.restoreModelSelection('anthropic', anthropicModelSelect, settings.anthropicModel);
     }
   );
 }
 
 // 設定の保存
-function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, anthropicApiKeyInput, anthropicModelSelect, statusMessage }) {
+function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, statusMessage }) {
   const settings = {
     apiProvider: apiProviderSelect.value,
     openrouterApiKey: openrouterApiKeyInput.value.trim(),
     openrouterModel: openrouterModelSelect.value,
     geminiApiKey: geminiApiKeyInput.value.trim(),
-    geminiModel: geminiModelSelect.value,
-    anthropicApiKey: anthropicApiKeyInput.value.trim(),
-    anthropicModel: anthropicModelSelect.value
+    geminiModel: geminiModelSelect.value
   };
 
   const validation = PopupUtils.validateApiKey(settings.apiProvider, settings);
@@ -623,7 +521,7 @@ function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterMode
 
 // APIテスト処理（実際の翻訳処理を利用）
 function testApi(elements) {
-  const { testApiProviderSelect, testTextArea, testButton, testStatus, testResult, useProxyServerCheckbox } = elements;
+  const { testApiProviderSelect, testTextArea, testButton, testStatus, testResult } = elements;
   const apiProvider = testApiProviderSelect.value;
   const testText = testTextArea.value.trim();
   if (!testText) {
@@ -643,9 +541,7 @@ function testApi(elements) {
         providerSettings = {
           apiProvider: 'openrouter',
           openrouterApiKey: settings.openrouterApiKey,
-          openrouterModel: settings.openrouterModel,
-          proxyServerUrl: settings.proxyServerUrl,
-          useProxyServer: settings.useProxyServer
+          openrouterModel: settings.openrouterModel
         };
       } else if (apiProvider === 'gemini') {
         if (!settings.geminiApiKey) {
@@ -657,19 +553,6 @@ function testApi(elements) {
           apiProvider: 'gemini',
           geminiApiKey: settings.geminiApiKey,
           geminiModel: settings.geminiModel
-        };
-      } else if (apiProvider === 'anthropic') {
-        if (!settings.anthropicApiKey) {
-          showStatus(testStatus, 'Anthropic APIキーが設定されていません', false);
-          testButton.disabled = false;
-          return;
-        }
-        providerSettings = {
-          apiProvider: 'anthropic',
-          anthropicApiKey: settings.anthropicApiKey,
-          anthropicModel: settings.anthropicModel,
-          proxyServerUrl: settings.proxyServerUrl,
-          useProxyServer: settings.useProxyServer
         };
       }
       

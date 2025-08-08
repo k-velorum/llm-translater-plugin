@@ -1,41 +1,21 @@
-import { loadSettings, DEFAULT_SETTINGS } from './settings.js';
+import { loadSettings } from './settings.js';
 import { translateText, makeApiRequest } from './api.js';
 
 // APIキー検証とモデル一覧取得の共通処理
 async function handleApiRequest(action, apiKey, endpoint, headers, successCallback, errorCallback, settings) {
-  console.log(`ポップアップからの${action}リクエストを受信`);
 
   try {
     let result;
-    // 中間サーバーを利用するかどうかの設定に基づいて処理を分岐
-    if (settings.useProxyServer) {
-      result = await handleProxyRequest(action, apiKey, settings.proxyServerUrl);
-    } else {
-      result = await handleDirectRequest(endpoint, headers);
-    }
-    console.log(`${action}成功:`, result);
-    successCallback(result);
+    // 直接APIにアクセス
+    result = await handleDirectRequest(endpoint, headers);
+      successCallback(result);
   } catch (error) {
     console.error(`${action}エラー:`, error);
     errorCallback({ message: error.message, details: error.stack || '' });
   }
 }
 
-// 中間サーバー経由でのリクエスト処理
-async function handleProxyRequest(action, apiKey, proxyServerUrl) {
-  const proxyAction = action.includes('検証') ? `verify/${action.split(' ')[0].toLowerCase()}` : `models/${action.split(' ')[0].toLowerCase()}`;
-  const proxyUrl = `${proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/${proxyAction}`;
-
-  return makeApiRequest(
-    proxyUrl,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey })
-    },
-    `${action}中にエラーが発生`
-  );
-}
+// 中間サーバー機能は削除
 
 // 直接APIにアクセスする処理
 async function handleDirectRequest(endpoint, headers) {
@@ -59,8 +39,7 @@ async function handleModelListRequest(provider, apiKey, endpoint, headers, dataP
     headers,
     (result) => {
       const models = dataProcessor(result);
-      console.log(`${provider}モデル一覧取得成功:`, models);
-      sendResponse({ models: models });
+          sendResponse({ models: models });
     },
     (error) => {
       // APIキーなしでも取得できるOpenRouterの場合はエラーを無視してデフォルトを返す
@@ -80,16 +59,13 @@ async function handleModelListRequest(provider, apiKey, endpoint, headers, dataP
 
 // バックグラウンドでのメッセージ処理
 export function handleBackgroundMessage(message, sender, sendResponse) {
-  console.log('バックグラウンドスクリプトがメッセージを受信:', message);
 
   // ツイート翻訳リクエストの処理
   if (message.action === 'translateTweet') {
-    console.log('ツイート翻訳リクエストを受信:', message);
-    loadSettings()
+      loadSettings()
       .then(settings => translateText(message.text, settings))
       .then(translatedText => {
-        console.log('ツイート翻訳成功:', translatedText);
-        sendResponse({ translatedText: translatedText });
+              sendResponse({ translatedText: translatedText });
       })
       .catch(error => {
         console.error('ツイート翻訳エラー:', error);
@@ -101,8 +77,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
 
   // テスト翻訳リクエストの処理
   if (message.action === 'testTranslate') {
-    console.log('ポップアップからのテスト翻訳リクエストを受信:', message);
-    // message.settings を直接使うのではなく、loadSettingsで最新を取得する方が安全かもしれない
+      // message.settings を直接使うのではなく、loadSettingsで最新を取得する方が安全かもしれない
     loadSettings()
       .then(currentSettings => {
         // popupからの設定で上書きする（APIキーやモデルなど）
@@ -110,8 +85,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
         return translateText(message.text, testSettings);
       })
       .then(result => {
-        console.log('テスト翻訳成功:', result);
-        sendResponse({ result: result });
+              sendResponse({ result: result });
       })
       .catch(error => {
         console.error('テスト翻訳エラー:', error);
@@ -147,27 +121,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
     return true;
   }
 
-  // Anthropic APIキー検証リクエストの処理
-  if (message.action === 'verifyAnthropicApiKey') {
-     loadSettings().then(settings => {
-        handleApiRequest(
-          'Anthropic APIキー検証',
-          message.apiKey,
-          'https://api.anthropic.com/v1/models', // Anthropicのモデル一覧エンドポイントは存在しないため、別の方法（例：messages APIを試す）が必要かも
-          {
-            'x-api-key': message.apiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          (result) => {
-             // Anthropicにはモデル一覧APIがないため、成功応答のみ返す
-            sendResponse({ result: { success: true } });
-          },
-          (error) => sendResponse({ error: error }),
-          settings
-       );
-     });
-    return true;
-  }
+  // Anthropic は削除済み
 
   // OpenRouterモデル一覧取得リクエストの処理
   if (message.action === 'getOpenRouterModels') {
@@ -183,24 +137,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
     return true;
   }
 
-  // Anthropicモデル一覧取得リクエストの処理
-  if (message.action === 'getAnthropicModels') {
-     loadSettings().then(settings => {
-        handleModelListRequest(
-          'Anthropic',
-          message.apiKey || settings.anthropicApiKey,
-          'https://api.anthropic.com/v1/models', // 存在しないエンドポイント。中間サーバー経由が必須になる
-          {
-            'x-api-key': message.apiKey || settings.anthropicApiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          (result) => result.data, // Anthropicのレスポンス形式に合わせる (仮)
-          sendResponse,
-          settings
-       );
-     });
-    return true;
-  }
+  // Anthropic は削除済み
 
   // Gemini APIキー検証
   if (message.action === 'verifyGeminiApiKey') {
@@ -236,6 +173,5 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
 
   // 他のメッセージタイプがあればここに追加
 
-  console.log('未処理のメッセージ:', message);
   return false; // 同期的に処理が完了したか、処理するハンドラがなかった場合
 }

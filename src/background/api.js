@@ -7,22 +7,7 @@ const OPENROUTER_HEADERS_BASE = {
   'X-Title': 'LLM Translation Plugin'
 };
 
-// 共通ユーティリティ関数
-const ApiUtils = {
-  // CORSエラーのフォールバック処理
-  async handleCorsError(error, translationFunction, text, settings) {
-    // 直接アクセスが失敗した場合、CORS制約の可能性があるため、中間サーバー経由で再試行
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      console.log('直接アクセスが失敗したため、中間サーバー経由で再試行します');
-      
-      // 一時的に中間サーバーを利用する設定に変更
-      const tempSettings = { ...settings, useProxyServer: true };
-      return await translationFunction(text, tempSettings);
-    }
-    
-    throw error;
-  }
-};
+// 以前のプロキシフォールバックは削除（直接アクセスのみ）
 
 // エラー詳細のフォーマット
 export function formatErrorDetails(error, settings) {
@@ -63,7 +48,6 @@ ${error.stack ? '\nスタックトレース:\n' + error.stack : ''}
 export async function makeApiRequest(url, options, errorMessage) {
   try {
     const response = await fetch(url, options);
-    console.log(`レスポンスステータス: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       let errorText = '';
@@ -84,7 +68,6 @@ export async function makeApiRequest(url, options, errorMessage) {
     }
 
     const data = await response.json();
-    console.log('成功レスポンス:', JSON.stringify(data, null, 2));
     return data;
   } catch (error) {
     console.error(`${errorMessage}:`, error);
@@ -103,35 +86,8 @@ async function translateWithOpenRouter(text, settings) {
     { role: 'user', content: text }
   ];
 
-  if (settings.useProxyServer) {
-    // 中間サーバー経由でのリクエスト
-    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/openrouter`;
-    console.log(`OpenRouter API リクエスト開始（中間サーバー経由）: ${proxyUrl}`);
-    console.log(`使用モデル: ${settings.openrouterModel}`);
-
-    const body = {
-      apiKey: settings.openrouterApiKey,
-      model: settings.openrouterModel,
-      messages: messages
-    };
-
-    console.log('OpenRouter リクエストボディ:', JSON.stringify(body, null, 2));
-
-    const data = await makeApiRequest(
-      proxyUrl,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      },
-      'OpenRouter API リクエスト中にエラーが発生'
-    );
-
-    return data.choices[0].message.content.trim();
-  } else {
+  {
     // 直接APIにアクセス
-    console.log(`OpenRouter API リクエスト開始（直接アクセス）`);
-    console.log(`使用モデル: ${settings.openrouterModel}`);
 
     try {
       const data = await makeApiRequest(
@@ -153,7 +109,7 @@ async function translateWithOpenRouter(text, settings) {
 
       return data.choices[0].message.content.trim();
     } catch (error) {
-      return await ApiUtils.handleCorsError(error, translateWithOpenRouter, text, settings);
+      throw error;
     }
   }
 }
@@ -197,85 +153,12 @@ async function translateWithGemini(text, settings) {
   }
 }
 
-// Anthropic APIでの翻訳
-async function translateWithAnthropic(text, settings) {
-  if (!settings.anthropicApiKey) {
-    throw new Error('Anthropic APIキーが設定されていません');
-  }
-
-  const systemPrompt = TRANSLATE_PROMPT;
-  const messages = [
-    {
-      role: 'user',
-      content: text
-    }
-  ];
-
-  if (settings.useProxyServer) {
-    // 中間サーバー経由でのリクエスト
-    const proxyUrl = `${settings.proxyServerUrl || DEFAULT_SETTINGS.proxyServerUrl}/api/anthropic`;
-    console.log(`Anthropic API リクエスト開始（中間サーバー経由）: ${proxyUrl}`);
-    console.log(`使用モデル: ${settings.anthropicModel}`);
-
-    const body = {
-      apiKey: settings.anthropicApiKey,
-      model: settings.anthropicModel,
-      system: systemPrompt,
-      messages: messages,
-      max_tokens: 1024
-    };
-
-    console.log('Anthropic リクエストボディ:', JSON.stringify(body, null, 2));
-
-    const data = await makeApiRequest(
-      proxyUrl,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      },
-      'Anthropic API リクエスト中にエラーが発生'
-    );
-
-    return data.content[0].text.trim();
-  } else {
-    // 直接APIにアクセス
-    console.log(`Anthropic API リクエスト開始（直接アクセス）`);
-    console.log(`使用モデル: ${settings.anthropicModel}`);
-
-    try {
-      const data = await makeApiRequest(
-        'https://api.anthropic.com/v1/messages',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': settings.anthropicApiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: settings.anthropicModel,
-            system: systemPrompt,
-            messages: messages,
-            max_tokens: 1024
-          })
-        },
-        'Anthropic API リクエスト中にエラーが発生'
-      );
-
-      return data.content[0].text.trim();
-    } catch (error) {
-      return await ApiUtils.handleCorsError(error, translateWithAnthropic, text, settings);
-    }
-  }
-}
+// Anthropic は削除済み
 
 // テキスト翻訳関数
 export async function translateText(text, settings) {
   if (settings.apiProvider === 'openrouter') {
     return await translateWithOpenRouter(text, settings);
-  } else if (settings.apiProvider === 'anthropic') {
-    return await translateWithAnthropic(text, settings);
   } else {
     return await translateWithGemini(text, settings);
   }

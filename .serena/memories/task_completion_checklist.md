@@ -1,58 +1,64 @@
 # Task Completion Checklist
 
-## When Modifying Extension Code
+## Before Starting Development
+- [ ] Icons generated (16x16, 48x48, 128x128 PNG files)
+- [ ] Extension loaded in Chrome developer mode
+- [ ] API keys configured in popup settings
 
-### Before Starting
-1. Ensure icons are generated (run `create_icons.sh` if needed)
-2. Check if proxy server is needed (for OpenRouter/Anthropic APIs)
-3. Load extension in Chrome developer mode for testing
+## During Development
 
-### During Development
-1. Follow ES6+ JavaScript conventions
-2. Use async/await for asynchronous operations
-3. Handle errors with try-catch blocks
-4. Add console logging for debugging
-5. Test in Chrome after each change (reload extension)
+### Code Standards
+- [ ] Use ES6+ features (arrow functions, async/await, template literals)
+- [ ] Follow modular architecture (separate concerns)
+- [ ] Handle errors with try-catch blocks
+- [ ] Add appropriate error messages for users
 
-### After Code Changes
-1. **Test Core Functionality**:
-   - Text selection translation
-   - Twitter/X.com button injection
-   - Settings persistence
-   - API connection (all providers)
+### Testing After Changes
+- [ ] Reload extension in chrome://extensions/
+- [ ] Check service worker console for errors
+- [ ] Test on actual webpage for content script errors
+- [ ] Verify Chrome runtime messaging works
 
-2. **Verify Chrome Extension**:
-   - Reload extension in `chrome://extensions/`
-   - Check for errors in extension details
-   - Open DevTools console on test pages
-   - Test keyboard shortcuts
+## Feature Testing Checklist
 
-3. **Check Proxy Server** (if modified):
-   - Restart Docker container
-   - Verify health endpoint
-   - Test CORS bypass functionality
+### Core Translation
+- [ ] Text selection → Right-click → Translate works
+- [ ] Keyboard shortcut (Ctrl/Cmd+Shift+T) triggers translation
+- [ ] Translation popup appears and displays correctly
+- [ ] Translation popup can be closed (X button or click outside)
 
-### Before Committing
-1. Remove debug console.log statements
-2. Verify all API keys are in .env (not hardcoded)
-3. Test all three API providers
-4. Ensure no JavaScript errors in console
-5. Verify settings save/load correctly
+### Twitter/X.com Integration
+- [ ] Translation buttons inject on tweet load
+- [ ] Translation buttons work for dynamically loaded tweets
+- [ ] Translated text displays properly under tweets
+- [ ] Multiple translations don't interfere with each other
 
-## Testing Checklist
-- [ ] Extension loads without errors
-- [ ] Context menu appears on text selection
-- [ ] Keyboard shortcut works (Ctrl/Cmd+Shift+T)
-- [ ] Translation popup displays correctly
-- [ ] Twitter/X.com buttons inject properly
-- [ ] Settings popup opens and saves
-- [ ] API keys validate correctly
-- [ ] Model selection updates dynamically
-- [ ] Translation requests succeed
-- [ ] Error messages display appropriately
+### Settings & API
+- [ ] Settings popup opens without errors
+- [ ] API keys save to chrome.storage.sync
+- [ ] Model selection dropdowns populate from API
+- [ ] API key validation shows correct status
+- [ ] Provider switching (OpenRouter ↔ Gemini) works
+- [ ] Test translation feature works in popup
 
-## Common Issues to Check
-- CORS errors → Ensure proxy server is running
-- API failures → Verify API keys and endpoints
-- UI not updating → Check content script injection
-- Settings not saving → Verify chrome.storage permissions
+### Error Handling
+- [ ] Invalid API key shows user-friendly error
+- [ ] Network errors display appropriate message
+- [ ] Rate limit errors handled gracefully
+- [ ] Missing settings have proper defaults
+
+## Before Committing
+- [ ] Remove debug console.log statements
+- [ ] Verify no hardcoded API keys or secrets
+- [ ] Test both API providers thoroughly
+- [ ] Ensure manifest.json version is updated if needed
+- [ ] Check that all file paths are correct
+
+## Common Issues & Solutions
+| Issue | Solution |
+|-------|----------|
+| Extension not loading | Check manifest.json syntax |
+| Translation not working | Verify API key and network |
+| Popup not opening | Check popup.html path in manifest |
+| Content script not injecting | Verify content_scripts in manifest |
+| Settings not persisting | Check chrome.storage permissions |
