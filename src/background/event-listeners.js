@@ -23,16 +23,14 @@ async function translateAndNotify(tabId, text) {
 async function setupContextMenu() {
   const menuId = 'translate-with-llm';
   try {
-    // 既存のメニューを削除 (Promiseでラップ)
+    // 既存のメニューを全て削除 (Promiseでラップ)
     await new Promise((resolve) => {
-      chrome.contextMenus.remove(menuId, () => {
-        // remove は ID が存在しない場合でも lastError を設定しないことがあるため、
-        // ここでの lastError チェックは必須ではないかもしれないが、念のため行う
+      chrome.contextMenus.removeAll(() => {
         if (chrome.runtime.lastError) {
-          // エラーが発生しても、無視して次に進む（存在しないメニューを削除しようとした場合など）
-          console.warn(`コンテキストメニュー削除時に警告: ${chrome.runtime.lastError.message}`);
+          // 削除対象がなくても lastError が入る場合があるため、警告ではなくデバッグに留める
+          console.debug(`コンテキストメニュー全削除時の情報: ${chrome.runtime.lastError.message}`);
         }
-        resolve(); // 削除が試行されたら resolve
+        resolve();
       });
     });
 
