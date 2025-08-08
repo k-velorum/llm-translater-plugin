@@ -172,19 +172,13 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
   // OpenRouterモデル一覧取得リクエストの処理
   if (message.action === 'getOpenRouterModels') {
     loadSettings().then(settings => {
-      handleModelListRequest(
-        'OpenRouter',
-        message.apiKey || settings.openrouterApiKey, // popupからキーが渡されなければ保存済みのものを使う
-        'https://openrouter.ai/api/v1/models',
-        {
-          'Authorization': `Bearer ${message.apiKey || settings.openrouterApiKey}`,
-          'HTTP-Referer': 'chrome-extension://llm-translator',
-          'X-Title': 'LLM Translation Plugin'
-        },
-        (result) => result.data, // OpenRouterのレスポンス形式に合わせる
-        sendResponse,
-        settings
-      );
+      const key = message.apiKey || settings.openrouterApiKey;
+      const headers = {
+        'HTTP-Referer': 'chrome-extension://llm-translator',
+        'X-Title': 'LLM Translation Plugin'
+      };
+      if (key) headers['Authorization'] = `Bearer ${key}`;
+      handleModelListRequest('OpenRouter', key, 'https://openrouter.ai/api/v1/models', headers, (result) => result.data, sendResponse, settings);
     });
     return true;
   }
@@ -205,6 +199,38 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
           settings
        );
      });
+    return true;
+  }
+
+  // Gemini APIキー検証
+  if (message.action === 'verifyGeminiApiKey') {
+    const apiKey = message.apiKey;
+    if (!apiKey) {
+      sendResponse({ error: { message: 'Gemini APIキーが未指定です' } });
+      return true;
+    }
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    makeApiRequest(endpoint, { method: 'GET' }, 'Gemini APIキー検証中にエラーが発生')
+      .then(() => sendResponse({ result: { success: true } }))
+      .catch((error) => sendResponse({ error: { message: error.message, details: error.stack || '' } }));
+    return true;
+  }
+
+  // Gemini モデル一覧取得
+  if (message.action === 'getGeminiModels') {
+    const apiKey = message.apiKey;
+    if (!apiKey) {
+      sendResponse({ error: { message: 'Gemini APIキーが未指定です' } });
+      return true;
+    }
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    makeApiRequest(endpoint, { method: 'GET' }, 'Gemini モデル一覧取得中にエラーが発生')
+      .then((result) => {
+        const modelsArr = result.models || [];
+        const models = modelsArr.map(m => ({ id: (m.name || '').replace('models/', ''), name: m.displayName || m.name, context_length: m.inputTokenLimit }));
+        sendResponse({ models });
+      })
+      .catch((error) => sendResponse({ error: { message: error.message, details: error.stack || '' } }));
     return true;
   }
 
