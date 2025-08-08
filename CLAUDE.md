@@ -5,7 +5,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ⚠️ **CRITICAL PRIORITY:**
 If the conditions for using Serena MCP are met, **ALWAYS use it**.
 No exceptions.
+## Quick Reference: When to Use Serena Tools
 
+1. **Code Understanding / Exploration**
+
+`get_symbols_overview`: A bird’s-eye view of top-level symbols per directory/file. Start here to get the map.
+
+`find_symbol`: Search for functions/classes/variables by name (partial match). For searches with a clear target.
+
+`find_referencing_symbols`: Reverse lookup of callers/references. For identifying the scope of impact.
+
+`read_file`: Read only the minimal necessary fragments. Reading the entire file is a last resort.
+
+**Anti-pattern:** Don’t immediately fall back to `search_for_pattern` (regex). First, improve accuracy with symbol search.
+
+2. **Implementation / Modification**
+
+`replace_symbol_body`: Replace the entire body of an existing function/class. For major overhauls or bug fixes.
+
+`insert_before_symbol` / `insert_after_symbol`: Safely add nearby without breaking the existing structure.
+
+`create_text_file` / `list_dir` / `find_file`: For creating new files or checking their placement.
+
+`replace_regex`: Broad superficial replacements (e.g., changing log tags). Do not use for semantic changes.
+
+3. **Bug Reproduction / Verification / Quality**
+
+`execute_shell_command`: Run tests/linters/builds. In principle, follow the loop: verify here ⇒ fix ⇒ re-run.
+
+`summarize_changes`: Output a summary of changes to prepare review materials.
+
+`restart_language_server`: Recovery when external edits or LSP malfunction occur.
+
+4. **Project Initialization / Context**
+
+`onboarding` / `check_onboarding_performed`: Automatically infer build/test steps and key configurations. Always run on first use.
+
+`prepare_for_new_conversation`: Re-read minimal information needed when resuming a session.
+
+`list_memories` / `write_memory` / `read_memory` / `delete_memory`: Lightweight memory in `.serena/memories/` to persist rules, key paths, etc.
+
+5. **Optional (Enable as Needed)**
+
+`insert_at_line` / `replace_lines` / `delete_lines`: Line-based precise edits (use with understanding of conflict risks).
+
+`initial_instructions` / `get_current_config` / `switch_modes`: For cases where the client cannot pass a system prompt, or when you want to switch modes.
 ## Project Overview
 
 This is a Chrome browser extension (Manifest V3) that translates selected text and Twitter/X.com tweets using Large Language Models (LLMs). The extension supports multiple LLM providers: OpenRouter API, Google Gemini API, and Anthropic API.

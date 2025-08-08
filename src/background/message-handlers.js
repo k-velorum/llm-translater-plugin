@@ -1,5 +1,5 @@
-import { loadSettings } from './settings.js'; // settings.js からインポート (後で作成)
-import { translateText, makeApiRequest, DEFAULT_SETTINGS } from './api.js';
+import { loadSettings, DEFAULT_SETTINGS } from './settings.js';
+import { translateText, makeApiRequest } from './api.js';
 
 // APIキー検証とモデル一覧取得の共通処理
 async function handleApiRequest(action, apiKey, endpoint, headers, successCallback, errorCallback, settings) {

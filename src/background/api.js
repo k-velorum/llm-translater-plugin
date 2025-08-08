@@ -1,15 +1,4 @@
-// デフォルト設定 (設定モジュールに移動する可能性あり)
-export const DEFAULT_SETTINGS = {
-  apiProvider: 'openrouter',
-  openrouterApiKey: '',
-  openrouterModel: 'openai/gpt-4o-mini',
-  geminiApiKey: '',
-  geminiModel: 'gemini-flash-2.0',
-  anthropicApiKey: '',
-  anthropicModel: 'claude-3-5-haiku-20241022',
-  proxyServerUrl: 'http://localhost:3000',
-  useProxyServer: false
-};
+import { DEFAULT_SETTINGS } from './settings.js';
 
 // 共通ユーティリティ関数
 const ApiUtils = {

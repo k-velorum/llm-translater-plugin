@@ -652,17 +652,7 @@ function loadSettings({
   useProxyServerCheckbox
 }) {
   chrome.storage.sync.get(
-    {
-      apiProvider: 'openrouter',
-      openrouterApiKey: '',
-      openrouterModel: 'openai/gpt-4o-mini',
-      geminiApiKey: '',
-      geminiModel: 'gemini-2.0-flash',
-      anthropicApiKey: '',
-      anthropicModel: 'claude-3-5-sonnet-20240620',
-      proxyServerUrl: 'http://localhost:3000',
-      useProxyServer: false
-    },
+    null,
     settings => {
       apiProviderSelect.value = settings.apiProvider;
       openrouterApiKeyInput.value = settings.openrouterApiKey;
@@ -727,16 +717,7 @@ function testApi(elements) {
     return;
   }
   chrome.storage.sync.get(
-    {
-      openrouterApiKey: '',
-      openrouterModel: 'openai/gpt-4o-mini',
-      geminiApiKey: '',
-      geminiModel: 'gemini-2.0-flash',
-      anthropicApiKey: '',
-      anthropicModel: 'claude-3-5-sonnet-20240620',
-      proxyServerUrl: 'http://localhost:3000',
-      useProxyServer: false
-    },
+    null,
     async settings => {
       let providerSettings;
       if (apiProvider === 'openrouter') {
