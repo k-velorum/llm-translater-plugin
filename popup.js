@@ -44,7 +44,7 @@ const PopupUtils = {
     const validationRules = {
       openrouter: { key: 'openrouterApiKey', message: 'OpenRouter APIキーを入力してください' },
       gemini: { key: 'geminiApiKey', message: 'Gemini APIキーを入力してください' },
-
+      // Ollama はAPIキー不要
     };
     
     const rule = validationRules[apiProvider];
@@ -79,7 +79,7 @@ function initSelect2(elements) {
     });
     
     // モデル選択時の処理
-    $('#openrouter-model, #gemini-model').on('select2:select', function(e) {
+    $('#openrouter-model, #gemini-model, #ollama-model').on('select2:select', function(e) {
       const provider = this.id.split('-')[0]; // openrouter または gemini
       const modelId = e.params.data.id;
       const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
@@ -140,6 +140,8 @@ function updateModelInfo(provider, modelData) {
     if (modelData.context_length) {
       infoText += `<br>入力上限: ${modelData.context_length} tokens`;
     }
+  } else if (provider === 'ollama') {
+    infoText = `モデル: ${modelData.name || modelData.id}`;
   }
   
   infoElement.innerHTML = infoText;
@@ -147,19 +149,33 @@ function updateModelInfo(provider, modelData) {
 
 // モデル一覧の読み込み
 function loadModels(elements) {
-  ['openrouter', 'gemini'].forEach(p => loadProviderModels(p, elements));
+  ['openrouter', 'gemini', 'ollama'].forEach(p => loadProviderModels(p, elements));
 }
 
 // 特定プロバイダーのモデル一覧を読み込む
 function loadProviderModels(provider, elements) {
-  const apiKeyInput = elements[`${provider}ApiKeyInput`];
   const modelSelect = elements[`${provider}ModelSelect`];
-  
-  // 保存されているAPIキーを取得
-  chrome.storage.sync.get([`${provider}ApiKey`], async (settings) => {
-    if (settings[`${provider}ApiKey`]) {
+
+  if (provider === 'ollama') {
+    chrome.storage.sync.get(['ollamaServer'], async (settings) => {
+      const server = settings.ollamaServer || 'http://localhost:11434';
       try {
-        const models = await fetchModels(provider, settings[`${provider}ApiKey`]);
+        const models = await fetchModels(provider, { server });
+        populateModelSelect(provider, modelSelect, models);
+      } catch (error) {
+        console.error('Ollamaモデル一覧の取得に失敗:', error);
+        // 失敗時は空のまま
+      }
+    });
+    return;
+  }
+
+  const apiKeyKey = `${provider}ApiKey`;
+  // 保存されているAPIキーを取得
+  chrome.storage.sync.get([apiKeyKey], async (settings) => {
+    if (settings[apiKeyKey]) {
+      try {
+        const models = await fetchModels(provider, { apiKey: settings[apiKeyKey] });
         populateModelSelect(provider, modelSelect, models);
       } catch (error) {
         console.error(`${provider}モデル一覧の取得に失敗:`, error);
@@ -169,7 +185,7 @@ function loadProviderModels(provider, elements) {
     } else {
       // APIキーがない場合はデフォルトモデルを設定
       setDefaultModels(provider, modelSelect);
-      
+
       // OpenRouterの場合は公開APIからモデル一覧を取得
       if (provider === 'openrouter') {
         try {
@@ -184,9 +200,9 @@ function loadProviderModels(provider, elements) {
 }
 
 // モデル一覧を取得（常にバックグラウンド経由）
-async function fetchModels(provider, apiKey) {
+async function fetchModels(provider, options) {
   try {
-    return await fetchModelsViaBackground(provider, apiKey);
+    return await fetchModelsViaBackground(provider, options);
   } catch (error) {
     console.error(`${provider}モデル取得エラー:`, error);
     throw error;
@@ -194,13 +210,19 @@ async function fetchModels(provider, apiKey) {
 }
 
 // バックグラウンド経由でモデル一覧を取得
-function fetchModelsViaBackground(provider, apiKey) {
+function fetchModelsViaBackground(provider, options) {
   return new Promise((resolve, reject) => {
+    const payload = { action: `get${provider.charAt(0).toUpperCase() + provider.slice(1)}Models` };
+    if (options) {
+      if (typeof options === 'string') {
+        payload.apiKey = options;
+      } else {
+        if (options.apiKey) payload.apiKey = options.apiKey;
+        if (options.server) payload.server = options.server;
+      }
+    }
     chrome.runtime.sendMessage(
-      {
-        action: `get${provider.charAt(0).toUpperCase() + provider.slice(1)}Models`,
-        apiKey: apiKey
-      },
+      payload,
       response => {
         if (chrome.runtime.lastError) {
           return reject(new Error(`バックグラウンドスクリプトエラー: ${chrome.runtime.lastError.message}`));
@@ -304,10 +326,13 @@ function getElements() {
     apiProviderSelect: document.getElementById('api-provider'),
     openrouterSection: document.getElementById('openrouter-section'),
     geminiSection: document.getElementById('gemini-section'),
+    ollamaSection: document.getElementById('ollama-section'),
     openrouterApiKeyInput: document.getElementById('openrouter-api-key'),
     openrouterModelSelect: document.getElementById('openrouter-model'),
     geminiApiKeyInput: document.getElementById('gemini-api-key'),
     geminiModelSelect: document.getElementById('gemini-model'),
+    ollamaServerInput: document.getElementById('ollama-server'),
+    ollamaModelSelect: document.getElementById('ollama-model'),
     saveButton: document.getElementById('save-button'),
     statusMessage: document.getElementById('status-message'),
     // テスト用要素
@@ -335,9 +360,9 @@ function initTabs({ tabs, tabContents }) {
   });
 }
 
-function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection }) {
+function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection, ollamaSection }) {
   apiProviderSelect.addEventListener('change', () => {
-    const sections = { openrouter: openrouterSection, gemini: geminiSection };
+    const sections = { openrouter: openrouterSection, gemini: geminiSection, ollama: ollamaSection };
     
     // すべてのセクションを非表示にする
     Object.values(sections).forEach(section => section.classList.add('hidden'));
@@ -396,7 +421,7 @@ function createProviderVerificationUI(provider, apiKeyInput) {
 }
 
 function bindEventHandlers(elements) {
-  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect } = elements;
+  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect } = elements;
   
   saveButton.addEventListener('click', () => saveSettings(elements));
   testButton.addEventListener('click', () => testApi(elements));
@@ -407,6 +432,17 @@ function bindEventHandlers(elements) {
     
   geminiApiKeyInput.addEventListener('change', 
     PopupUtils.createApiKeyChangeHandler('gemini', geminiApiKeyInput, geminiModelSelect));
+
+  // Ollama サーバーが変更されたらモデル一覧を更新
+  ollamaServerInput.addEventListener('change', async () => {
+    const server = ollamaServerInput.value.trim() || 'http://localhost:11434';
+    try {
+      const models = await fetchModels('ollama', { server });
+      populateModelSelect('ollama', ollamaModelSelect, models);
+    } catch (error) {
+      console.error('Ollamaモデル一覧の取得に失敗:', error);
+    }
+  });
 }
 
 // APIキー検証処理（常にバックグラウンド経由）
@@ -468,7 +504,10 @@ function loadSettings({
   geminiApiKeyInput, 
   geminiModelSelect, 
   openrouterSection, 
-  geminiSection
+  geminiSection,
+  ollamaSection,
+  ollamaServerInput,
+  ollamaModelSelect
 }) {
   chrome.storage.sync.get(
     null,
@@ -478,11 +517,14 @@ function loadSettings({
       openrouterModelSelect.value = settings.openrouterModel;
       geminiApiKeyInput.value = settings.geminiApiKey;
       geminiModelSelect.value = settings.geminiModel;
+      ollamaServerInput.value = settings.ollamaServer || 'http://localhost:11434';
+      ollamaModelSelect.value = settings.ollamaModel || '';
       
       // APIプロバイダーに応じたセクションの表示制御
       const sections = {
         openrouter: openrouterSection,
-        gemini: geminiSection
+        gemini: geminiSection,
+        ollama: ollamaSection
       };
       
       // すべてのセクションを非表示にする
@@ -493,18 +535,21 @@ function loadSettings({
       
       // モデルの選択状態を復元
       PopupUtils.restoreModelSelection('openrouter', openrouterModelSelect, settings.openrouterModel);
+      PopupUtils.restoreModelSelection('ollama', ollamaModelSelect, settings.ollamaModel);
     }
   );
 }
 
 // 設定の保存
-function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, statusMessage }) {
+function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, statusMessage }) {
   const settings = {
     apiProvider: apiProviderSelect.value,
     openrouterApiKey: openrouterApiKeyInput.value.trim(),
     openrouterModel: openrouterModelSelect.value,
     geminiApiKey: geminiApiKeyInput.value.trim(),
-    geminiModel: geminiModelSelect.value
+    geminiModel: geminiModelSelect.value,
+    ollamaServer: ollamaServerInput.value.trim() || 'http://localhost:11434',
+    ollamaModel: ollamaModelSelect.value
   };
 
   const validation = PopupUtils.validateApiKey(settings.apiProvider, settings);
@@ -553,6 +598,17 @@ function testApi(elements) {
           apiProvider: 'gemini',
           geminiApiKey: settings.geminiApiKey,
           geminiModel: settings.geminiModel
+        };
+      } else if (apiProvider === 'ollama') {
+        if (!settings.ollamaModel) {
+          showStatus(testStatus, 'Ollamaのモデルが設定されていません', false);
+          testButton.disabled = false;
+          return;
+        }
+        providerSettings = {
+          apiProvider: 'ollama',
+          ollamaServer: settings.ollamaServer || 'http://localhost:11434',
+          ollamaModel: settings.ollamaModel
         };
       }
       

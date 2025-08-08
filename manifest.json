@@ -12,6 +12,7 @@
     "https://api.openai.com/*",
     "https://openrouter.ai/*",
     "https://generativelanguage.googleapis.com/*",
+    "http://*/*",
     "https://*.twitter.com/*",
     "https://*.x.com/*"
   ],

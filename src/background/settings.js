@@ -5,6 +5,9 @@ export const DEFAULT_SETTINGS = {
   openrouterModel: 'openai/gpt-4o-mini',
   geminiApiKey: '',
   geminiModel: 'gemini-flash-2.0',
+  // Ollama (local LLM)
+  ollamaServer: 'http://localhost:11434',
+  ollamaModel: '',
   // Anthropic / プロキシ機能は削除済み
 };
 

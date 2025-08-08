@@ -27,6 +27,10 @@ export function formatErrorDetails(error, settings) {
     apiProvider = 'Google Gemini';
     modelName = settings.geminiModel;
     maskedApiKey = maskApiKey(settings.geminiApiKey);
+  } else if (settings.apiProvider === 'ollama') {
+    apiProvider = `Ollama (${settings.ollamaServer || 'http://localhost:11434'})`;
+    modelName = settings.ollamaModel || '未選択';
+    maskedApiKey = '不要';
   } else if (settings.apiProvider === 'anthropic') {
     apiProvider = 'Anthropic';
     modelName = settings.anthropicModel;
@@ -50,6 +54,16 @@ export async function makeApiRequest(url, options, errorMessage) {
     const response = await fetch(url, options);
 
     if (!response.ok) {
+      // Ollama の CORS で 403 が出やすいため、分かりやすいヒントを付与
+      if (response.status === 403 && /\/api\/(generate|tags)/.test(url)) {
+        throw new Error(
+          'API Error: 403 Forbidden - おそらくOllamaのCORS設定が原因です。\n' +
+          '環境変数 OLLAMA_ORIGINS を設定してサーバーを起動してください。例:\n' +
+          '  macOS/Linux:  OLLAMA_ORIGINS=* ollama serve\n' +
+          '  Windows(PowerShell):  $env:OLLAMA_ORIGINS="*"; ollama serve\n' +
+          '特定の拡張IDのみ許可する場合は chrome-extension://<拡張ID> を指定してください。'
+        );
+      }
       let errorText = '';
       try {
         const errorData = await response.json();
@@ -155,10 +169,42 @@ async function translateWithGemini(text, settings) {
 
 // Anthropic は削除済み
 
+// Ollama (local server) での翻訳
+async function translateWithOllama(text, settings) {
+  const server = (settings.ollamaServer || 'http://localhost:11434').replace(/\/$/, '');
+  if (!settings.ollamaModel) {
+    throw new Error('Ollamaのモデルが選択されていません');
+  }
+
+  const apiUrl = `${server}/api/generate`;
+  const prompt = `${TRANSLATE_PROMPT}\n\n${text}`;
+  try {
+    const data = await makeApiRequest(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.ollamaModel,
+          prompt,
+          stream: false
+        })
+      },
+      'Ollama API リクエスト中にエラーが発生'
+    );
+    // stream: false の場合、response に全文が入る
+    return (data.response || '').trim();
+  } catch (error) {
+    throw error;
+  }
+}
+
 // テキスト翻訳関数
 export async function translateText(text, settings) {
   if (settings.apiProvider === 'openrouter') {
     return await translateWithOpenRouter(text, settings);
+  } else if (settings.apiProvider === 'ollama') {
+    return await translateWithOllama(text, settings);
   } else {
     return await translateWithGemini(text, settings);
   }

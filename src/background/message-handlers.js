@@ -171,6 +171,22 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
     return true;
   }
 
+  // Ollama モデル一覧取得
+  if (message.action === 'getOllamaModels') {
+    loadSettings().then(settings => {
+      const server = (message.server || settings.ollamaServer || 'http://localhost:11434').replace(/\/$/, '');
+      const endpoint = `${server}/api/tags`;
+      makeApiRequest(endpoint, { method: 'GET' }, 'Ollama モデル一覧取得中にエラーが発生')
+        .then((result) => {
+          const arr = result.models || [];
+          const models = arr.map(m => ({ id: m.name, name: m.name }));
+          sendResponse({ models });
+        })
+        .catch((error) => sendResponse({ error: { message: error.message, details: error.stack || '' } }));
+    });
+    return true;
+  }
+
   // 他のメッセージタイプがあればここに追加
 
   return false; // 同期的に処理が完了したか、処理するハンドラがなかった場合

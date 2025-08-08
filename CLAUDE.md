@@ -272,6 +272,40 @@ mcp__serena__read_memory(memory_file_name="api_endpoints.md")
 mcp__serena__delete_memory(memory_file_name="old_notes.md")
 ```
 
+## Serena Memory Tools Usage
+
+This section clarifies how to use Serena memory tools. It documents tool behavior only (not tasks):
+
+- `mcp__serena__list_memories`: Lists available memory files.
+- `mcp__serena__read_memory(memory_file_name=...)`: Reads the full content of a memory (e.g., `api_configuration.md`).
+- `mcp__serena__write_memory(memory_name=..., content=...)`: Creates or updates a memory with the provided content.
+- `mcp__serena__delete_memory(memory_file_name=...)`: Deletes a memory file.
+
+Notes:
+- Do not use `mcp__serena__onboarding` to write or update memories; it does not persist content.
+- Prefer updating via `mcp__serena__write_memory` rather than deleting memories.
+
+Examples:
+```python
+# List memories
+mcp__serena__list_memories()
+
+# Read a memory
+mcp__serena__read_memory(memory_file_name="api_configuration.md")
+
+# Write/update a memory
+mcp__serena__write_memory(
+    memory_name="api_configuration",
+    content="""
+    # API Configuration
+    (markdown content)
+    """
+)
+
+# Delete a memory (use sparingly)
+mcp__serena__delete_memory(memory_file_name="obsolete.md")
+```
+
 ## Project Overview
 
 This is a Chrome browser extension (Manifest V3) that translates selected text and Twitter/X.com tweets using Large Language Models (LLMs). The extension supports multiple LLM providers: OpenRouter API and Google Gemini API.
