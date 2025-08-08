@@ -79,7 +79,7 @@ function initSelect2(elements) {
     });
     
     // モデル選択時の処理
-    $('#openrouter-model, #gemini-model, #ollama-model').on('select2:select', function(e) {
+    $('#openrouter-model, #gemini-model, #ollama-model, #lmstudio-model').on('select2:select', function(e) {
       const provider = this.id.split('-')[0]; // openrouter または gemini
       const modelId = e.params.data.id;
       const modelData = $(this).find(`option[value="${modelId}"]`).data('model');
@@ -142,6 +142,8 @@ function updateModelInfo(provider, modelData) {
     }
   } else if (provider === 'ollama') {
     infoText = `モデル: ${modelData.name || modelData.id}`;
+  } else if (provider === 'lmstudio') {
+    infoText = `モデル: ${modelData.name || modelData.id}`;
   }
   
   infoElement.innerHTML = infoText;
@@ -149,7 +151,7 @@ function updateModelInfo(provider, modelData) {
 
 // モデル一覧の読み込み
 function loadModels(elements) {
-  ['openrouter', 'gemini', 'ollama'].forEach(p => loadProviderModels(p, elements));
+  ['openrouter', 'gemini', 'ollama', 'lmstudio'].forEach(p => loadProviderModels(p, elements));
 }
 
 // 特定プロバイダーのモデル一覧を読み込む
@@ -164,6 +166,21 @@ function loadProviderModels(provider, elements) {
         populateModelSelect(provider, modelSelect, models);
       } catch (error) {
         console.error('Ollamaモデル一覧の取得に失敗:', error);
+        // 失敗時は空のまま
+      }
+    });
+    return;
+  }
+
+  if (provider === 'lmstudio') {
+    chrome.storage.sync.get(['lmstudioServer', 'lmstudioApiKey'], async (settings) => {
+      const server = settings.lmstudioServer || 'http://localhost:1234';
+      const apiKey = settings.lmstudioApiKey || '';
+      try {
+        const models = await fetchModels(provider, { server, apiKey });
+        populateModelSelect(provider, modelSelect, models);
+      } catch (error) {
+        console.error('LM Studioモデル一覧の取得に失敗:', error);
         // 失敗時は空のまま
       }
     });
@@ -327,12 +344,16 @@ function getElements() {
     openrouterSection: document.getElementById('openrouter-section'),
     geminiSection: document.getElementById('gemini-section'),
     ollamaSection: document.getElementById('ollama-section'),
+    lmstudioSection: document.getElementById('lmstudio-section'),
     openrouterApiKeyInput: document.getElementById('openrouter-api-key'),
     openrouterModelSelect: document.getElementById('openrouter-model'),
     geminiApiKeyInput: document.getElementById('gemini-api-key'),
     geminiModelSelect: document.getElementById('gemini-model'),
     ollamaServerInput: document.getElementById('ollama-server'),
     ollamaModelSelect: document.getElementById('ollama-model'),
+    lmstudioServerInput: document.getElementById('lmstudio-server'),
+    lmstudioApiKeyInput: document.getElementById('lmstudio-api-key'),
+    lmstudioModelSelect: document.getElementById('lmstudio-model'),
     saveButton: document.getElementById('save-button'),
     statusMessage: document.getElementById('status-message'),
     // テスト用要素
@@ -360,9 +381,9 @@ function initTabs({ tabs, tabContents }) {
   });
 }
 
-function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection, ollamaSection }) {
+function setupApiProviderToggle({ apiProviderSelect, openrouterSection, geminiSection, ollamaSection, lmstudioSection }) {
   apiProviderSelect.addEventListener('change', () => {
-    const sections = { openrouter: openrouterSection, gemini: geminiSection, ollama: ollamaSection };
+    const sections = { openrouter: openrouterSection, gemini: geminiSection, ollama: ollamaSection, lmstudio: lmstudioSection };
     
     // すべてのセクションを非表示にする
     Object.values(sections).forEach(section => section.classList.add('hidden'));
@@ -421,7 +442,7 @@ function createProviderVerificationUI(provider, apiKeyInput) {
 }
 
 function bindEventHandlers(elements) {
-  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect } = elements;
+  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect } = elements;
   
   saveButton.addEventListener('click', () => saveSettings(elements));
   testButton.addEventListener('click', () => testApi(elements));
@@ -443,6 +464,20 @@ function bindEventHandlers(elements) {
       console.error('Ollamaモデル一覧の取得に失敗:', error);
     }
   });
+
+  // LM Studio サーバー/APIキー変更でモデル一覧を更新
+  const refreshLmstudioModels = async () => {
+    const server = lmstudioServerInput.value.trim() || 'http://localhost:1234';
+    const apiKey = lmstudioApiKeyInput.value.trim();
+    try {
+      const models = await fetchModels('lmstudio', { server, apiKey });
+      populateModelSelect('lmstudio', lmstudioModelSelect, models);
+    } catch (error) {
+      console.error('LM Studioモデル一覧の取得に失敗:', error);
+    }
+  };
+  lmstudioServerInput.addEventListener('change', refreshLmstudioModels);
+  lmstudioApiKeyInput.addEventListener('change', refreshLmstudioModels);
 }
 
 // APIキー検証処理（常にバックグラウンド経由）
@@ -507,7 +542,11 @@ function loadSettings({
   geminiSection,
   ollamaSection,
   ollamaServerInput,
-  ollamaModelSelect
+  ollamaModelSelect,
+  lmstudioSection,
+  lmstudioServerInput,
+  lmstudioApiKeyInput,
+  lmstudioModelSelect
 }) {
   chrome.storage.sync.get(
     null,
@@ -519,12 +558,16 @@ function loadSettings({
       geminiModelSelect.value = settings.geminiModel;
       ollamaServerInput.value = settings.ollamaServer || 'http://localhost:11434';
       ollamaModelSelect.value = settings.ollamaModel || '';
+      lmstudioServerInput.value = settings.lmstudioServer || 'http://localhost:1234';
+      lmstudioApiKeyInput.value = settings.lmstudioApiKey || '';
+      lmstudioModelSelect.value = settings.lmstudioModel || '';
       
       // APIプロバイダーに応じたセクションの表示制御
       const sections = {
         openrouter: openrouterSection,
         gemini: geminiSection,
-        ollama: ollamaSection
+        ollama: ollamaSection,
+        lmstudio: lmstudioSection
       };
       
       // すべてのセクションを非表示にする
@@ -536,12 +579,13 @@ function loadSettings({
       // モデルの選択状態を復元
       PopupUtils.restoreModelSelection('openrouter', openrouterModelSelect, settings.openrouterModel);
       PopupUtils.restoreModelSelection('ollama', ollamaModelSelect, settings.ollamaModel);
+      PopupUtils.restoreModelSelection('lmstudio', lmstudioModelSelect, settings.lmstudioModel);
     }
   );
 }
 
 // 設定の保存
-function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, statusMessage }) {
+function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect, statusMessage }) {
   const settings = {
     apiProvider: apiProviderSelect.value,
     openrouterApiKey: openrouterApiKeyInput.value.trim(),
@@ -549,7 +593,10 @@ function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterMode
     geminiApiKey: geminiApiKeyInput.value.trim(),
     geminiModel: geminiModelSelect.value,
     ollamaServer: ollamaServerInput.value.trim() || 'http://localhost:11434',
-    ollamaModel: ollamaModelSelect.value
+    ollamaModel: ollamaModelSelect.value,
+    lmstudioServer: lmstudioServerInput.value.trim() || 'http://localhost:1234',
+    lmstudioApiKey: lmstudioApiKeyInput.value.trim(),
+    lmstudioModel: lmstudioModelSelect.value
   };
 
   const validation = PopupUtils.validateApiKey(settings.apiProvider, settings);
@@ -609,6 +656,18 @@ function testApi(elements) {
           apiProvider: 'ollama',
           ollamaServer: settings.ollamaServer || 'http://localhost:11434',
           ollamaModel: settings.ollamaModel
+        };
+      } else if (apiProvider === 'lmstudio') {
+        if (!settings.lmstudioModel) {
+          showStatus(testStatus, 'LM Studio のモデルが設定されていません', false);
+          testButton.disabled = false;
+          return;
+        }
+        providerSettings = {
+          apiProvider: 'lmstudio',
+          lmstudioServer: settings.lmstudioServer || 'http://localhost:1234',
+          lmstudioApiKey: settings.lmstudioApiKey || '',
+          lmstudioModel: settings.lmstudioModel
         };
       }
       

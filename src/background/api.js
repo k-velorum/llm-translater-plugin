@@ -31,6 +31,10 @@ export function formatErrorDetails(error, settings) {
     apiProvider = `Ollama (${settings.ollamaServer || 'http://localhost:11434'})`;
     modelName = settings.ollamaModel || '未選択';
     maskedApiKey = '不要';
+  } else if (settings.apiProvider === 'lmstudio') {
+    apiProvider = `LM Studio (${settings.lmstudioServer || 'http://localhost:1234'})`;
+    modelName = settings.lmstudioModel || '未選択';
+    maskedApiKey = maskApiKey(settings.lmstudioApiKey);
   } else if (settings.apiProvider === 'anthropic') {
     apiProvider = 'Anthropic';
     modelName = settings.anthropicModel;
@@ -199,12 +203,49 @@ async function translateWithOllama(text, settings) {
   }
 }
 
+// LM Studio (OpenAI互換) での翻訳
+async function translateWithLmStudio(text, settings) {
+  const server = (settings.lmstudioServer || 'http://localhost:1234').replace(/\/$/, '');
+  if (!settings.lmstudioModel) {
+    throw new Error('LM Studio のモデルが選択されていません');
+  }
+
+  const apiUrl = `${server}/v1/chat/completions`;
+  const messages = [
+    { role: 'system', content: TRANSLATE_PROMPT },
+    { role: 'user', content: text }
+  ];
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (settings.lmstudioApiKey) headers['Authorization'] = `Bearer ${settings.lmstudioApiKey}`;
+
+  const body = JSON.stringify({
+    model: settings.lmstudioModel,
+    messages,
+    temperature: 0.2,
+    stream: false
+  });
+
+  try {
+    const data = await makeApiRequest(
+      apiUrl,
+      { method: 'POST', headers, body },
+      'LM Studio API リクエスト中にエラーが発生'
+    );
+    return (data.choices?.[0]?.message?.content || '').trim();
+  } catch (error) {
+    throw error;
+  }
+}
+
 // テキスト翻訳関数
 export async function translateText(text, settings) {
   if (settings.apiProvider === 'openrouter') {
     return await translateWithOpenRouter(text, settings);
   } else if (settings.apiProvider === 'ollama') {
     return await translateWithOllama(text, settings);
+  } else if (settings.apiProvider === 'lmstudio') {
+    return await translateWithLmStudio(text, settings);
   } else {
     return await translateWithGemini(text, settings);
   }

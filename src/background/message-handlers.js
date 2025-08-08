@@ -187,6 +187,25 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
     return true;
   }
 
+  // LM Studio モデル一覧取得 (OpenAI互換)
+  if (message.action === 'getLmstudioModels') {
+    loadSettings().then(settings => {
+      const server = (message.server || settings.lmstudioServer || 'http://localhost:1234').replace(/\/$/, '');
+      const endpoint = `${server}/v1/models`;
+      const headers = {};
+      const apiKey = message.apiKey || settings.lmstudioApiKey;
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      makeApiRequest(endpoint, { method: 'GET', headers }, 'LM Studio モデル一覧取得中にエラーが発生')
+        .then((result) => {
+          const arr = result.data || [];
+          const models = arr.map(m => ({ id: m.id, name: m.id }));
+          sendResponse({ models });
+        })
+        .catch((error) => sendResponse({ error: { message: error.message, details: error.stack || '' } }));
+    });
+    return true;
+  }
+
   // 他のメッセージタイプがあればここに追加
 
   return false; // 同期的に処理が完了したか、処理するハンドラがなかった場合

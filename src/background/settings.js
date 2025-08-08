@@ -8,6 +8,10 @@ export const DEFAULT_SETTINGS = {
   // Ollama (local LLM)
   ollamaServer: 'http://localhost:11434',
   ollamaModel: '',
+  // LM Studio (OpenAI互換)
+  lmstudioServer: 'http://localhost:1234',
+  lmstudioModel: '',
+  lmstudioApiKey: '',
   // Anthropic / プロキシ機能は削除済み
 };
 

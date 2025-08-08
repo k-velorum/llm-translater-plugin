@@ -222,6 +222,7 @@
         <option value="openrouter">OpenRouter API</option>
         <option value="gemini">Google Gemini API</option>
         <option value="ollama">Ollama (Local Server)</option>
+        <option value="lmstudio">LM Studio (Local Server)</option>
       </select>
     </div>
     
@@ -276,6 +277,26 @@
         <div id="ollama-model-info" class="model-info"></div>
       </div>
     </div>
+
+    <!-- LM Studio (Local) 設定 -->
+    <div id="lmstudio-section" class="api-section hidden">
+      <div class="api-heading">LM Studio ローカルサーバー設定</div>
+      <div class="form-group">
+        <label for="lmstudio-server">サーバーアドレス</label>
+        <input type="text" id="lmstudio-server" placeholder="http://localhost:1234" />
+      </div>
+      <div class="form-group">
+        <label for="lmstudio-api-key">APIキー（任意）</label>
+        <input type="text" id="lmstudio-api-key" placeholder="(必要な場合のみ)" />
+      </div>
+      <div class="form-group">
+        <label for="lmstudio-model">モデル</label>
+        <select id="lmstudio-model" class="model-select">
+          <option value="">モデルを読み込み中...</option>
+        </select>
+        <div id="lmstudio-model-info" class="model-info"></div>
+      </div>
+    </div>
     
     <button id="save-button">設定を保存</button>
     <div id="status-message" class="status hidden"></div>
@@ -288,6 +309,7 @@
         <option value="openrouter">OpenRouter API</option>
         <option value="gemini">Google Gemini API</option>
         <option value="ollama">Ollama (Local Server)</option>
+        <option value="lmstudio">LM Studio (Local Server)</option>
       </select>
     </div>
     
