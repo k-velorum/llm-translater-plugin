@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+⚠️ **CRITICAL PRIORITY:**
+If the conditions for using Serena MCP are met, **ALWAYS use it**.
+No exceptions.
+
 ## Project Overview
 
 This is a Chrome browser extension (Manifest V3) that translates selected text and Twitter/X.com tweets using Large Language Models (LLMs). The extension supports multiple LLM providers: OpenRouter API, Google Gemini API, and Anthropic API.
