@@ -1,5 +1,12 @@
 import { DEFAULT_SETTINGS } from './settings.js';
 
+// 共通プロンプト/ヘッダー
+const TRANSLATE_PROMPT = '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。';
+const OPENROUTER_HEADERS_BASE = {
+  'HTTP-Referer': 'chrome-extension://llm-translator',
+  'X-Title': 'LLM Translation Plugin'
+};
+
 // 共通ユーティリティ関数
 const ApiUtils = {
   // CORSエラーのフォールバック処理
@@ -92,14 +99,8 @@ async function translateWithOpenRouter(text, settings) {
   }
 
   const messages = [
-    {
-      role: 'system',
-      content: '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。'
-    },
-    {
-      role: 'user',
-      content: text
-    }
+    { role: 'system', content: TRANSLATE_PROMPT },
+    { role: 'user', content: text }
   ];
 
   if (settings.useProxyServer) {
@@ -140,8 +141,7 @@ async function translateWithOpenRouter(text, settings) {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${settings.openrouterApiKey}`,
-            'HTTP-Referer': 'chrome-extension://llm-translator',
-            'X-Title': 'LLM Translation Plugin'
+            ...OPENROUTER_HEADERS_BASE
           },
           body: JSON.stringify({
             model: settings.openrouterModel,
@@ -177,7 +177,7 @@ async function translateWithGemini(text, settings) {
             {
               parts: [
                 {
-                  text: `以下の文章を日本語に翻訳してください。翻訳結果のみを出力してください。\n\n${text}`
+                  text: `${TRANSLATE_PROMPT}\n\n${text}`
                 }
               ]
             }
@@ -203,7 +203,7 @@ async function translateWithAnthropic(text, settings) {
     throw new Error('Anthropic APIキーが設定されていません');
   }
 
-  const systemPrompt = '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。';
+  const systemPrompt = TRANSLATE_PROMPT;
   const messages = [
     {
       role: 'user',
