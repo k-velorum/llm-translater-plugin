@@ -1,6 +1,24 @@
 import { loadSettings, initializeDefaultSettings } from './settings.js';
 import { translateText, formatErrorDetails } from './api.js';
 
+const PAGE_TRANSLATION_SEPARATOR = '[[[SEP]]]';
+
+async function translateAndNotify(tabId, text) {
+  const settings = await loadSettings();
+  try {
+    const translatedText = await translateText(text, settings);
+    await chrome.tabs.sendMessage(tabId, { action: 'showTranslation', translatedText });
+  } catch (error) {
+    console.error('翻訳エラー:', error);
+    const errorDetails = formatErrorDetails(error, settings);
+    try {
+      await chrome.tabs.sendMessage(tabId, { action: 'showTranslation', translatedText: errorDetails });
+    } catch (sendMessageError) {
+      console.error('エラーメッセージ送信失敗:', sendMessageError);
+    }
+  }
+}
+
 // コンテキストメニュー作成
 async function setupContextMenu() {
   const menuId = 'translate-with-llm';
@@ -65,14 +83,13 @@ async function setupContextMenu() {
 async function handleContextMenuClick(info, tab) {
   if (info.menuItemId === 'translate-page') {
     console.log('ページ全体翻訳リクエストを受信');
-    const settings = await loadSettings();
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageTexts' });
       const pageTexts = response.texts;
-      const separator = '[[[SEP]]]';
-      const joinedText = pageTexts.join(separator);
+      const joinedText = pageTexts.join(PAGE_TRANSLATION_SEPARATOR);
+      const settings = await loadSettings();
       const translatedJoined = await translateText(joinedText, settings);
-      const translatedArray = translatedJoined.split(separator);
+      const translatedArray = translatedJoined.split(PAGE_TRANSLATION_SEPARATOR);
       await chrome.tabs.sendMessage(tab.id, { action: 'applyPageTranslation', translations: translatedArray });
     } catch (error) {
       console.error('ページ全体翻訳エラー:', error);
@@ -82,29 +99,10 @@ async function handleContextMenuClick(info, tab) {
   if (info.menuItemId === 'translate-with-llm' && info.selectionText) {
     const selectedText = info.selectionText;
     console.log('コンテキストメニューから翻訳:', selectedText);
-    const settings = await loadSettings();
     try {
       // タブが存在するか確認し、メッセージを送信
       await chrome.tabs.get(tab.id); // tab.id が存在するか確認
-      try {
-        const translatedText = await translateText(selectedText, settings);
-        await chrome.tabs.sendMessage(tab.id, {
-          action: 'showTranslation',
-          translatedText: translatedText
-        });
-      } catch (error) {
-        console.error('翻訳エラー (コンテキストメニュー):', error);
-        const errorDetails = formatErrorDetails(error, settings);
-        // エラーが発生してもタブにメッセージを送信しようと試みる
-        try {
-          await chrome.tabs.sendMessage(tab.id, {
-            action: 'showTranslation',
-            translatedText: errorDetails // エラーメッセージを送信
-          });
-        } catch (sendMessageError) {
-           console.error('エラーメッセージ送信失敗 (コンテキストメニュー):', sendMessageError);
-        }
-      }
+      await translateAndNotify(tab.id, selectedText);
     } catch (tabError) {
       // タブが存在しない、またはアクセスできない場合のエラー
       console.error('タブへのアクセスエラー (コンテキストメニュー):', tabError);
@@ -145,26 +143,7 @@ async function handleCommand(command) {
 
       const selectedText = response.selectedText;
       console.log('選択テキスト (ショートカット):', selectedText);
-      const settings = await loadSettings();
-
-      try {
-        const translatedText = await translateText(selectedText, settings);
-        await chrome.tabs.sendMessage(tab.id, {
-          action: 'showTranslation',
-          translatedText: translatedText
-        });
-      } catch (error) {
-        console.error('翻訳エラー (ショートカット):', error);
-        const errorDetails = formatErrorDetails(error, settings);
-         try {
-            await chrome.tabs.sendMessage(tab.id, {
-              action: 'showTranslation',
-              translatedText: errorDetails // エラーメッセージを送信
-            });
-         } catch (sendMessageError) {
-            console.error('エラーメッセージ送信失敗 (ショートカット):', sendMessageError);
-         }
-      }
+      await translateAndNotify(tab.id, selectedText);
     } catch (error) {
        if (error.message && error.message.includes('Could not establish connection')) {
          console.warn('コンテンツスクリプトとの接続確立失敗 (ショートカット):', error.message);
