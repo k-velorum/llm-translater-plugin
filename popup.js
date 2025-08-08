@@ -191,55 +191,13 @@ function loadProviderModels(provider, elements) {
   });
 }
 
-// モデル一覧をAPIから取得
+// モデル一覧を取得（常にバックグラウンド経由）
 async function fetchModels(provider, apiKey) {
   try {
-    // 直接フェッチ試行
-    const headers = {};
-    let url = '';
-    
-    if (provider === 'openrouter') {
-      url = 'https://openrouter.ai/api/v1/models';
-      headers['HTTP-Referer'] = 'chrome-extension://llm-translator';
-      headers['X-Title'] = 'LLM Translation Plugin';
-      if (apiKey) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-      }
-    } else if (provider === 'gemini') {
-      url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-      // Gemini はヘッダー不要
-    } else if (provider === 'anthropic') {
-      url = 'https://api.anthropic.com/v1/models';
-      headers['x-api-key'] = apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-    }
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: headers
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (provider === 'openrouter') {
-        return data.data || [];
-      } else if (provider === 'gemini') {
-        const modelsArr = data.models || [];
-        return modelsArr.map(m => ({
-          id: m.name.replace('models/', ''),     // translateWithGemini() と整合
-          name: m.displayName || m.name,
-          context_length: m.inputTokenLimit
-        }));
-      } else {
-        return data.models || [];
-      }
-    }
-    
-    // 直接フェッチが失敗した場合、バックグラウンド経由で試行
     return await fetchModelsViaBackground(provider, apiKey);
   } catch (error) {
     console.error(`${provider}モデル取得エラー:`, error);
-    return await fetchModelsViaBackground(provider, apiKey);
+    throw error;
   }
 }
 
@@ -541,7 +499,7 @@ function saveAdvancedSettings(elements) {
   });
 }
 
-// APIキー検証処理
+// APIキー検証処理（常にバックグラウンド経由）
 async function verifyApiKey(provider, apiKey, statusElem, buttonElem) {
   if (!apiKey) {
     statusElem.textContent = 'APIキーを入力してください';
@@ -553,63 +511,19 @@ async function verifyApiKey(provider, apiKey, statusElem, buttonElem) {
   statusElem.style.color = '#666';
 
   try {
-    // 直接APIにアクセス
-    let url, headers;
-    
-    if (provider === 'openrouter') {
-      url = 'https://openrouter.ai/api/v1/models';
-      headers = {
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'chrome-extension://llm-translator',
-        'X-Title': 'LLM Translation Plugin'
-      };
-    } else if (provider === 'anthropic') {
-      url = 'https://api.anthropic.com/v1/models';
-      headers = {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      };
-    }
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: headers
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`${provider} モデル一覧:`, data);
-      statusElem.textContent = '✓ APIキーは有効です';
-      statusElem.style.color = '#155724';
-      
-      // モデル一覧を更新
-      const elements = getElements();
-      const modelSelect = elements[`${provider}ModelSelect`];
-      const models = provider === 'openrouter' ? data.data || [] : data.models || [];
-      populateModelSelect(provider, modelSelect, models);
-    } else {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      console.error(`${provider} APIキー検証エラー:`, errorData);
-      statusElem.textContent = `✗ APIキーが無効: ${errorData.error?.message || response.statusText}`;
-      statusElem.style.color = '#d32f2f';
-    }
+    await verifyApiKeyViaBackground(provider, apiKey);
+    statusElem.textContent = '✓ APIキーは有効です';
+    statusElem.style.color = '#155724';
+
+    // モデル一覧を更新
+    const models = await fetchModelsViaBackground(provider, apiKey);
+    const elements = getElements();
+    const modelSelect = elements[`${provider}ModelSelect`];
+    populateModelSelect(provider, modelSelect, models);
   } catch (error) {
-    console.error('APIキー検証中にエラー:', error);
-    try {
-      await verifyApiKeyViaBackground(provider, apiKey);
-      statusElem.textContent = '✓ APIキーは有効です (バックグラウンド経由)';
-      statusElem.style.color = '#155724';
-      
-      // モデル一覧を更新
-      const models = await fetchModelsViaBackground(provider, apiKey);
-      const elements = getElements();
-      const modelSelect = elements[`${provider}ModelSelect`];
-      populateModelSelect(provider, modelSelect, models);
-    } catch (bgError) {
-      console.error('バックグラウンド経由検証エラー:', bgError);
-      statusElem.textContent = `✗ APIキー検証失敗: ${bgError.message || 'ネットワークエラー'}`;
-      statusElem.style.color = '#d32f2f';
-    }
+    console.error('APIキー検証エラー:', error);
+    statusElem.textContent = `✗ APIキー検証失敗: ${error.message || 'ネットワークエラー'}`;
+    statusElem.style.color = '#d32f2f';
   } finally {
     buttonElem.disabled = false;
   }
