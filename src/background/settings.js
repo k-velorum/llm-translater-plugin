@@ -15,6 +15,12 @@ export const DEFAULT_SETTINGS = {
   // プラットフォーム別 機能有効/無効
   enableTwitterTranslation: true,
   enableYoutubeTranslation: true,
+  // ページ全体翻訳 詳細設定（UIで変更可能）
+  pageTranslationSeparator: '[[[SEP]]]',
+  pageTranslationMaxChars: 3500,
+  pageTranslationMaxItemsPerChunk: 50,
+  pageTranslationChunksPerPass: 6,
+  pageTranslationDelayMs: 400,
   // Anthropic / プロキシ機能は削除済み
 };
 

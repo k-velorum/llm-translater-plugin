@@ -407,6 +407,14 @@ function getElements() {
     twitterFeatureCheckbox: document.getElementById('enable-twitter-translation'),
     youtubeFeatureCheckbox: document.getElementById('enable-youtube-translation'),
     featureSaveButton: document.getElementById('feature-save-button'),
+    // 詳細設定（高度）
+    advancedToggleButton: document.getElementById('toggle-advanced-settings'),
+    advancedBody: document.getElementById('advanced-settings-body'),
+    pageTranslationMaxCharsInput: document.getElementById('page-translation-max-chars'),
+    pageTranslationMaxItemsInput: document.getElementById('page-translation-max-items'),
+    pageTranslationChunksPerPassInput: document.getElementById('page-translation-chunks-per-pass'),
+    pageTranslationDelayMsInput: document.getElementById('page-translation-delay-ms'),
+    pageTranslationSeparatorInput: document.getElementById('page-translation-separator'),
     // テスト用要素
     testApiProviderSelect: document.getElementById('test-api-provider'),
     testTextArea: document.getElementById('test-text'),
@@ -493,7 +501,7 @@ function createProviderVerificationUI(provider, apiKeyInput) {
 }
 
 function bindEventHandlers(elements) {
-  const { saveButton, featureSaveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect } = elements;
+  const { saveButton, featureSaveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect, advancedToggleButton, advancedBody } = elements;
   
   saveButton.addEventListener('click', () => saveSettings(elements));
   if (featureSaveButton) featureSaveButton.addEventListener('click', () => saveFeatureSettings(elements));
@@ -530,13 +538,38 @@ function bindEventHandlers(elements) {
   };
   lmstudioServerInput.addEventListener('change', refreshLmstudioModels);
   lmstudioApiKeyInput.addEventListener('change', refreshLmstudioModels);
+
+  // 高度な設定の開閉
+  if (advancedToggleButton && advancedBody) {
+    advancedToggleButton.addEventListener('click', () => {
+      advancedBody.classList.toggle('hidden');
+    });
+  }
 }
 
 // 機能タブの設定保存（Twitter / YouTube 有効化）
 function saveFeatureSettings({ twitterFeatureCheckbox, youtubeFeatureCheckbox, featureStatusMessage }) {
+  // 数値入力のユーティリティ
+  const num = (el, def, min, max) => {
+    if (!el) return def;
+    const v = parseInt((el.value || '').toString(), 10);
+    if (isNaN(v)) return def;
+    if (typeof min === 'number' && v < min) return min;
+    if (typeof max === 'number' && v > max) return max;
+    return v;
+  };
+
+  // DOM取得
+  const els = getElements();
+
   const partial = {
     enableTwitterTranslation: !!(twitterFeatureCheckbox && twitterFeatureCheckbox.checked),
-    enableYoutubeTranslation: !!(youtubeFeatureCheckbox && youtubeFeatureCheckbox.checked)
+    enableYoutubeTranslation: !!(youtubeFeatureCheckbox && youtubeFeatureCheckbox.checked),
+    pageTranslationMaxChars: num(els.pageTranslationMaxCharsInput, 3500, 500, 32000),
+    pageTranslationMaxItemsPerChunk: num(els.pageTranslationMaxItemsInput, 50, 5, 500),
+    pageTranslationChunksPerPass: num(els.pageTranslationChunksPerPassInput, 6, 1, 100),
+    pageTranslationDelayMs: num(els.pageTranslationDelayMsInput, 400, 0, 60000),
+    pageTranslationSeparator: ((els.pageTranslationSeparatorInput?.value || '[[[SEP]]]').trim() || '[[[SEP]]]')
   };
   chrome.storage.sync.set(partial, () => {
     const target = featureStatusMessage || document.getElementById('feature-status-message') || document.getElementById('status-message');
@@ -631,6 +664,18 @@ function loadSettings({
       // 機能オン/オフの復元（デフォルトtrue）
       if (twitterFeatureCheckbox) twitterFeatureCheckbox.checked = settings.enableTwitterTranslation !== false;
       if (youtubeFeatureCheckbox) youtubeFeatureCheckbox.checked = settings.enableYoutubeTranslation !== false;
+
+      // 詳細設定（高度）の復元
+      try {
+        const els = getElements();
+        if (els.pageTranslationMaxCharsInput) els.pageTranslationMaxCharsInput.value = (settings.pageTranslationMaxChars ?? 3500);
+        if (els.pageTranslationMaxItemsInput) els.pageTranslationMaxItemsInput.value = (settings.pageTranslationMaxItemsPerChunk ?? 50);
+        if (els.pageTranslationChunksPerPassInput) els.pageTranslationChunksPerPassInput.value = (settings.pageTranslationChunksPerPass ?? 6);
+        if (els.pageTranslationDelayMsInput) els.pageTranslationDelayMsInput.value = (settings.pageTranslationDelayMs ?? 400);
+        if (els.pageTranslationSeparatorInput) els.pageTranslationSeparatorInput.value = (settings.pageTranslationSeparator ?? '[[[SEP]]]');
+      } catch (e) {
+        console.warn('詳細設定の復元に失敗:', e);
+      }
       
       // APIプロバイダーに応じたセクションの表示制御
       const sections = {

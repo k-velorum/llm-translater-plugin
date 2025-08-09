@@ -1,13 +1,11 @@
 import { loadSettings, initializeDefaultSettings } from './settings.js';
 import { translateText, translateBatchStructured, formatErrorDetails } from './api.js';
 
+// 既定値（settings に無い場合のフォールバック）
 const PAGE_TRANSLATION_SEPARATOR = '[[[SEP]]]';
-// 1バッチあたりの上限（Gemini向けに保守的）
 const PAGE_TRANSLATION_MAX_CHARS = 3500;
 const PAGE_TRANSLATION_MAX_ITEMS_PER_CHUNK = 50;
-// セッションあたり1パスで処理するチャンク数（続行で再開）
 const PAGE_TRANSLATION_CHUNKS_PER_PASS = 6;
-// チャンク間のスロットリング（429回避のため）
 const PAGE_TRANSLATION_DELAY_MS = 400;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -35,7 +33,7 @@ function chunkByMaxCharsAndItems(items, maxChars, maxItems, sep) {
   return chunks;
 }
 
-async function translateJoinedOrSplit(chunk, settings, depth = 0) {
+async function translateJoinedOrSplit(chunk, settings, params, depth = 0) {
   // まず Gemini の場合は構造化バッチに挑戦（区切り不一致を根本回避）
   if (settings.apiProvider === 'gemini') {
     try {
@@ -47,9 +45,11 @@ async function translateJoinedOrSplit(chunk, settings, depth = 0) {
   }
 
   // まずは連結翻訳を試す
-  const joined = chunk.join(PAGE_TRANSLATION_SEPARATOR);
+  const sep = params?.sep || PAGE_TRANSLATION_SEPARATOR;
+  const delayMs = typeof params?.delayMs === 'number' ? params.delayMs : PAGE_TRANSLATION_DELAY_MS;
+  const joined = chunk.join(sep);
   let translated = await translateText(joined, settings);
-  let parts = translated.split(PAGE_TRANSLATION_SEPARATOR);
+  let parts = translated.split(sep);
   if (parts.length === chunk.length) return parts;
 
   console.warn(`区切り数不一致のためサブ分割を試行: expected=${chunk.length} actual=${parts.length} depth=${depth}`);
@@ -60,7 +60,7 @@ async function translateJoinedOrSplit(chunk, settings, depth = 0) {
       try {
         const t = await translateText(s, settings);
         perItem.push(t);
-        await sleep(PAGE_TRANSLATION_DELAY_MS);
+        await sleep(delayMs);
       } catch (e) {
         console.error('個別翻訳フォールバック中のエラー:', e);
         perItem.push(s);
@@ -70,9 +70,9 @@ async function translateJoinedOrSplit(chunk, settings, depth = 0) {
   }
   // チャンクを2分割して再帰
   const mid = Math.floor(chunk.length / 2);
-  const left = await translateJoinedOrSplit(chunk.slice(0, mid), settings, depth + 1);
-  await sleep(PAGE_TRANSLATION_DELAY_MS);
-  const right = await translateJoinedOrSplit(chunk.slice(mid), settings, depth + 1);
+  const left = await translateJoinedOrSplit(chunk.slice(0, mid), settings, params, depth + 1);
+  await sleep(delayMs);
+  const right = await translateJoinedOrSplit(chunk.slice(mid), settings, params, depth + 1);
   return [...left, ...right];
 }
 
@@ -98,10 +98,11 @@ function deletePageTranslationSession(tabId, snapshotId) {
 
 async function processPageTranslationPass(session, chunksPerPass) {
   const { tabId, snapshotId, settings, chunks } = session;
+  const delayMs = typeof session.params?.delayMs === 'number' ? session.params.delayMs : PAGE_TRANSLATION_DELAY_MS;
   let processed = 0;
   while (!session.canceled && session.nextIndex < chunks.length && processed < chunksPerPass) {
     const chunk = chunks[session.nextIndex];
-    const parts = await translateJoinedOrSplit(chunk, settings);
+    const parts = await translateJoinedOrSplit(chunk, settings, session.params);
     try {
       await chrome.tabs.sendMessage(tabId, {
         action: 'applyPageTranslationChunk',
@@ -115,7 +116,7 @@ async function processPageTranslationPass(session, chunksPerPass) {
     session.offset += chunk.length;
     session.nextIndex += 1;
     processed += 1;
-    await sleep(PAGE_TRANSLATION_DELAY_MS);
+    await sleep(delayMs);
   }
 
   // 完了したらセッションを破棄
@@ -310,16 +311,28 @@ async function handleContextMenuClick(info, tab) {
       const snapshotId = response.snapshotId;
       const settings = await loadSettings();
 
+      // ユーザー設定の反映（安全域にクランプ）
+      const sep = (settings.pageTranslationSeparator || PAGE_TRANSLATION_SEPARATOR).toString();
+      const maxChars = clampInt(settings.pageTranslationMaxChars, 500, 32000, PAGE_TRANSLATION_MAX_CHARS);
+      const maxItems = clampInt(settings.pageTranslationMaxItemsPerChunk, 5, 500, PAGE_TRANSLATION_MAX_ITEMS_PER_CHUNK);
+      const chunksPerPass = clampInt(settings.pageTranslationChunksPerPass, 1, 100, PAGE_TRANSLATION_CHUNKS_PER_PASS);
+      const delayMs = clampInt(settings.pageTranslationDelayMs, 0, 60000, PAGE_TRANSLATION_DELAY_MS);
+
       // 長文になりすぎるのを避け、小チャンクに分けて逐次適用
-      const chunks = chunkByMaxCharsAndItems(
-        pageTexts,
-        PAGE_TRANSLATION_MAX_CHARS,
-        PAGE_TRANSLATION_MAX_ITEMS_PER_CHUNK,
-        PAGE_TRANSLATION_SEPARATOR
-      );
+      const chunks = chunkByMaxCharsAndItems(pageTexts, maxChars, maxItems, sep);
 
       const totalItems = pageTexts.length;
-      const session = { tabId: tab.id, snapshotId, settings, chunks, nextIndex: 0, offset: 0, totalItems, canceled: false };
+      const session = {
+        tabId: tab.id,
+        snapshotId,
+        settings,
+        chunks,
+        nextIndex: 0,
+        offset: 0,
+        totalItems,
+        canceled: false,
+        params: { sep, maxChars, maxItemsPerChunk: maxItems, chunksPerPass, delayMs }
+      };
       registerPageTranslationSession(session);
       // 開始時点で0%・総チャンク数を表示
       try {
@@ -335,7 +348,7 @@ async function handleContextMenuClick(info, tab) {
       } catch (e) {
         console.warn('初期コントロール表示に失敗:', e);
       }
-      await processPageTranslationPass(session, PAGE_TRANSLATION_CHUNKS_PER_PASS);
+      await processPageTranslationPass(session, session.params.chunksPerPass);
       if (!session.canceled && session.nextIndex < session.chunks.length) {
         await chrome.tabs.sendMessage(tab.id, {
           action: 'showPageTranslationControls',
@@ -444,7 +457,7 @@ export function registerEventListeners() {
           const { snapshotId } = message;
           const session = getPageTranslationSession(tabId, snapshotId);
           if (!session) return sendResponse && sendResponse({ ok: false, error: 'session not found' });
-          await processPageTranslationPass(session, PAGE_TRANSLATION_CHUNKS_PER_PASS);
+          await processPageTranslationPass(session, session.params?.chunksPerPass || PAGE_TRANSLATION_CHUNKS_PER_PASS);
           if (!session.canceled && session.nextIndex < session.chunks.length) {
             await chrome.tabs.sendMessage(tabId, {
               action: 'showPageTranslationControls',
@@ -490,4 +503,15 @@ export function registerEventListeners() {
   });
 
   console.log('イベントリスナーが登録されました。');
+}
+
+// 数値設定のクランプ（未定義/NaNはデフォルト）
+function clampInt(value, min, max, fallback) {
+  const n = parseInt(value, 10);
+  if (Number.isFinite(n)) {
+    if (typeof min === 'number' && n < min) return min;
+    if (typeof max === 'number' && n > max) return max;
+    return n;
+  }
+  return fallback;
 }

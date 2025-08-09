@@ -340,6 +340,36 @@
         </label>
       </div>
     </div>
+
+    <div class="api-section" id="advanced-settings-section">
+      <div class="api-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span>ページ全体翻訳 詳細設定</span>
+        <button id="toggle-advanced-settings" type="button" style="width:auto;background:#f0f0f0;color:#333;padding:6px 10px;border:1px solid #ccc;">開く/閉じる</button>
+      </div>
+      <div id="advanced-settings-body" class="hidden">
+        <div class="form-group">
+          <label for="page-translation-max-chars">チャンク最大文字数（例: 3500、範囲: 500〜32000）</label>
+          <input type="number" id="page-translation-max-chars" min="500" max="32000" placeholder="3500" />
+        </div>
+        <div class="form-group">
+          <label for="page-translation-max-items">チャンク最大要素数（例: 50、範囲: 5〜500）</label>
+          <input type="number" id="page-translation-max-items" min="5" max="500" placeholder="50" />
+        </div>
+        <div class="form-group">
+          <label for="page-translation-chunks-per-pass">1パスあたりのチャンク数（例: 6、範囲: 1〜100）</label>
+          <input type="number" id="page-translation-chunks-per-pass" min="1" max="100" placeholder="6" />
+        </div>
+        <div class="form-group">
+          <label for="page-translation-delay-ms">チャンク間ディレイ (ms)（例: 400、範囲: 0〜60000）</label>
+          <input type="number" id="page-translation-delay-ms" min="0" max="60000" placeholder="400" />
+        </div>
+        <div class="form-group">
+          <label for="page-translation-separator">区切りトークン（高度な設定・変更非推奨、例: [[[SEP]]])</label>
+          <input type="text" id="page-translation-separator" placeholder="[[[SEP]]]" />
+          <div style="font-size:12px;color:#666;margin-top:6px;">注: 変更により訳文の分割が崩れる可能性があります。原文に出現しないユニークな文字列を推奨します。</div>
+        </div>
+      </div>
+    </div>
     <button id="feature-save-button">機能の設定を保存</button>
     <div id="feature-status-message" class="status hidden"></div>
   </div>
