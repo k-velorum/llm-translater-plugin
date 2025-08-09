@@ -167,12 +167,23 @@
       width: 100% !important;
       margin-bottom: 5px;
     }
+
+    /* 元のネイティブ<select>を不可視・非クリック化（Select2適用済みのもののみ） */
+    select.model-select {
+      position: absolute !important;
+      left: -9999px !important;
+      width: 1px !important;
+      height: 1px !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
     
     .select2-container--default .select2-selection--single {
       height: 38px;
       padding: 5px 0;
       border: 1px solid #ccc;
     }
+    /* デフォルトのSelect2 CSSに任せる（明示オーバーライドを撤去） */
     
     .select2-container--default .select2-selection--single .select2-selection__arrow {
       height: 36px;
@@ -181,6 +192,11 @@
     .select2-container--default .select2-results__option--highlighted[aria-selected] {
       background-color: #4285f4;
     }
+    /* 非表示 select のアウトラインを抑止（フォーカス二重枠対策） */
+    .select2-hidden-accessible {
+      outline: none !important;
+    }
+    /* 余計なアウトライン指定は撤去 */
     
     /* モデル情報表示のスタイル調整 */
     .model-info {

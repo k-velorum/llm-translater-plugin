@@ -71,11 +71,8 @@ function init() {
 function initSelect2(elements) {
   // jQueryが読み込まれているか確認
   if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-    $('.model-select').select2({
-      placeholder: 'モデルを選択',
-      allowClear: true,
-      width: '100%',
-      templateResult: formatModelOption
+    $('.model-select').each(function() {
+      setupOrResetSelect2($(this));
     });
     
     // モデル選択時の処理
@@ -90,6 +87,23 @@ function initSelect2(elements) {
   } else {
     console.error('Select2またはjQueryが読み込まれていません');
   }
+}
+
+function setupOrResetSelect2($select) {
+  // 既に初期化済みなら一旦破棄してから再初期化（重複DOM/当たり判定を排除）
+  if ($select.data('select2')) {
+    try { $select.select2('destroy'); } catch (e) {}
+  }
+  const $parent = $select.closest('.api-section');
+  $select.select2({
+    placeholder: 'モデルを選択',
+    allowClear: false,
+    width: '100%',
+    dropdownParent: $parent.length ? $parent : undefined,
+    templateResult: formatModelOption,
+    templateSelection: formatModelSelection,
+    minimumResultsForSearch: Infinity
+  });
 }
 
 // モデルオプションの表示形式をカスタマイズ
@@ -115,6 +129,14 @@ function formatModelOption(model) {
   }
   
   return model.text;
+}
+
+// 選択済み表示（セレクション）は素のテキストに固定
+function formatModelSelection(model) {
+  if (!model || !model.id) return model.text || '';
+  const $option = $(model.element);
+  const modelData = $option.data('model');
+  return (modelData && (modelData.name || modelData.id)) || model.text || '';
 }
 
 // モデル情報の表示を更新
@@ -278,21 +300,17 @@ function populateModelSelect(provider, selectElement, models) {
       
       selectElement.appendChild(option);
     });
-    
+
     // 前回選択していたモデルがあれば選択状態を復元
     if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
       selectElement.value = selectedModel;
-      
-      // Select2の更新
-      if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-        $(selectElement).trigger('change');
-        
-        // モデル情報を更新
-        const modelData = $(selectElement).find(`option[value="${selectedModel}"]`).data('model');
-        if (modelData) {
-          updateModelInfo(provider, modelData);
-        }
-      }
+    }
+    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+      // DOMをクリーンにするため再初期化
+      setupOrResetSelect2($(selectElement));
+      $(selectElement).trigger('change');
+      const modelData = $(selectElement).find(`option[value="${selectElement.value}"]`).data('model');
+      if (modelData) updateModelInfo(provider, modelData);
     }
   } else {
     // モデルが取得できない場合はデフォルトモデルをセット
