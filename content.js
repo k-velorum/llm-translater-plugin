@@ -198,8 +198,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return;
   } else if (message.action === 'showPageTranslationControls') {
-    const { snapshotId, remainingChunks, processedItems, totalItems } = message;
-    showPageTranslationControls(snapshotId, remainingChunks, processedItems, totalItems);
+    const { snapshotId, remainingChunks, processedItems, totalItems, totalChunks, canContinue } = message;
+    showPageTranslationControls(snapshotId, remainingChunks, processedItems, totalItems, totalChunks, canContinue);
     return false;
   } else if (message.action === 'hidePageTranslationControls') {
     hidePageTranslationControls();
@@ -299,7 +299,7 @@ function closePopupOnClickOutside(event) {
 let pageTranslationControls = null;
 let pageTranslationControlsSnapshotId = null;
 
-function showPageTranslationControls(snapshotId, remainingChunks, processedItems = 0, totalItems = 0) {
+function showPageTranslationControls(snapshotId, remainingChunks, processedItems = 0, totalItems = 0, totalChunks = 0, canContinue = true) {
   // 既存を更新/再作成
   pageTranslationControlsSnapshotId = snapshotId;
   if (!pageTranslationControls) {
@@ -331,6 +331,7 @@ function showPageTranslationControls(snapshotId, remainingChunks, processedItems
     row.style.gap = '8px';
 
     const btn = document.createElement('button');
+    btn.id = 'llm-page-translation-continue';
     btn.textContent = '続きを実行';
     btn.style.padding = '6px 10px';
     btn.style.border = '1px solid #888';
@@ -357,6 +358,7 @@ function showPageTranslationControls(snapshotId, remainingChunks, processedItems
     };
 
     const stopBtn = document.createElement('button');
+    stopBtn.id = 'llm-page-translation-stop';
     stopBtn.textContent = '停止';
     stopBtn.style.padding = '6px 10px';
     stopBtn.style.border = '1px solid #b00';
@@ -393,9 +395,14 @@ function showPageTranslationControls(snapshotId, remainingChunks, processedItems
   // 更新
   const info = pageTranslationControls.querySelector('#llm-page-translation-info');
   const progress = pageTranslationControls.querySelector('#llm-page-translation-progress');
+  const continueBtn = pageTranslationControls.querySelector('#llm-page-translation-continue');
   const percent = totalItems > 0 ? Math.floor((processedItems / totalItems) * 100) : 0;
-  if (info) info.textContent = `残りチャンク: ${remainingChunks}`;
+  if (info) info.textContent = totalChunks > 0 ? `残りチャンク: ${remainingChunks}/${totalChunks}` : `残りチャンク: ${remainingChunks}`;
   if (progress) progress.textContent = `進捗: ${percent}% (${processedItems}/${totalItems})`;
+  if (continueBtn) {
+    continueBtn.disabled = !canContinue;
+    continueBtn.textContent = canContinue ? '続きを実行' : '実行中…';
+  }
 }
 
 function hidePageTranslationControls() {

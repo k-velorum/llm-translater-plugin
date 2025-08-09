@@ -217,6 +217,20 @@ async function handleContextMenuClick(info, tab) {
       const totalItems = pageTexts.length;
       const session = { tabId: tab.id, snapshotId, settings, chunks, nextIndex: 0, offset: 0, totalItems, canceled: false };
       registerPageTranslationSession(session);
+      // 開始時点で0%・総チャンク数を表示
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'showPageTranslationControls',
+          snapshotId,
+          remainingChunks: session.chunks.length,
+          processedItems: 0,
+          totalItems: session.totalItems,
+          totalChunks: session.chunks.length,
+          canContinue: false
+        });
+      } catch (e) {
+        console.warn('初期コントロール表示に失敗:', e);
+      }
       await processPageTranslationPass(session, PAGE_TRANSLATION_CHUNKS_PER_PASS);
       if (!session.canceled && session.nextIndex < session.chunks.length) {
         await chrome.tabs.sendMessage(tab.id, {
@@ -224,7 +238,9 @@ async function handleContextMenuClick(info, tab) {
           snapshotId,
           remainingChunks: session.chunks.length - session.nextIndex,
           processedItems: session.offset,
-          totalItems: session.totalItems
+          totalItems: session.totalItems,
+          totalChunks: session.chunks.length,
+          canContinue: true
         });
       } else {
         await chrome.tabs.sendMessage(tab.id, { action: 'hidePageTranslationControls', snapshotId });
@@ -331,7 +347,9 @@ export function registerEventListeners() {
               snapshotId,
               remainingChunks: session.chunks.length - session.nextIndex,
               processedItems: session.offset,
-              totalItems: session.totalItems
+              totalItems: session.totalItems,
+              totalChunks: session.chunks.length,
+              canContinue: true
             });
           } else {
             await chrome.tabs.sendMessage(tabId, { action: 'hidePageTranslationControls', snapshotId });
