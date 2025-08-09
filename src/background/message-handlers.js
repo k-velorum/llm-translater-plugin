@@ -176,7 +176,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
     loadSettings().then(settings => {
       const server = (message.server || settings.ollamaServer || 'http://localhost:11434').replace(/\/$/, '');
       const endpoint = `${server}/api/tags`;
-      makeApiRequest(endpoint, { method: 'GET' }, 'Ollama モデル一覧取得中にエラーが発生')
+      makeApiRequest(endpoint, { method: 'GET' }, 'Ollama モデル一覧取得中にエラーが発生', 'info')
         .then((result) => {
           const arr = result.models || [];
           const models = arr.map(m => ({ id: m.name, name: m.name }));
@@ -195,7 +195,7 @@ export function handleBackgroundMessage(message, sender, sendResponse) {
       const headers = {};
       const apiKey = message.apiKey || settings.lmstudioApiKey;
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      makeApiRequest(endpoint, { method: 'GET', headers }, 'LM Studio モデル一覧取得中にエラーが発生')
+      makeApiRequest(endpoint, { method: 'GET', headers }, 'LM Studio モデル一覧取得中にエラーが発生', 'info')
         .then((result) => {
           const arr = result.data || [];
           const models = arr.map(m => ({ id: m.id, name: m.id }));

@@ -53,7 +53,7 @@ ${error.stack ? '\nスタックトレース:\n' + error.stack : ''}
 }
 
 // APIリクエスト共通処理
-export async function makeApiRequest(url, options, errorMessage) {
+export async function makeApiRequest(url, options, errorMessage, logLevel = 'error') {
   try {
     const response = await fetch(url, options);
 
@@ -88,7 +88,8 @@ export async function makeApiRequest(url, options, errorMessage) {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error(`${errorMessage}:`, error);
+    const logger = (console[logLevel] || console.error).bind(console);
+    logger(`${errorMessage}:`, error);
     throw error;
   }
 }
