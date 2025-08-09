@@ -6,13 +6,15 @@
   "permissions": [
     "contextMenus",
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "https://api.openai.com/*",
     "https://openrouter.ai/*",
     "https://generativelanguage.googleapis.com/*",
     "http://*/*",
+    "https://*/*",
     "https://*.twitter.com/*",
     "https://*.x.com/*"
   ],
