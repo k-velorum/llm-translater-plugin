@@ -1,4 +1,4 @@
-# Current Architecture (2025-08-09)
+# Current Architecture (2025-08-10)
 
 ## System Overview
 Chrome Extension (Manifest V3) for LLM-based translation of web text, Twitter/X.com tweets, and YouTube comments.
@@ -36,16 +36,18 @@ Chrome Extension (Manifest V3) for LLM-based translation of web text, Twitter/X.
   - `validateApiKey()`: Key validation
   - `fetchAvailableModels()`: Dynamic model loading
   - `makeApiRequest()`: Common API request handler with exponential backoff
-  - Special separator token `[[[SEP]]]` handling for page translation
+  - Special separator token handling for page translation (customizable)
 - **message-handlers.js**: Chrome runtime message processing
 - **settings.js**: Chrome storage sync management with feature flags
   - `enableTwitterTranslation`: Twitter translation feature toggle
   - `enableYoutubeTranslation`: YouTube translation feature toggle
+  - Page translation advanced settings (separator, chunk sizes, delays)
 - **event-listeners.js**: Extension events (install, context menu, shortcuts)
-  - Page translation session management
+  - Page translation session management with customizable parameters
   - Chunked page translation with continuation UI
   - Translation cancellation support
   - Fallback translation display via chrome.scripting API
+  - Dynamic application of user-defined chunk sizes and delays
 
 ### Content Script (`content.js`)
 - Text selection translation popups
@@ -60,7 +62,14 @@ Chrome Extension (Manifest V3) for LLM-based translation of web text, Twitter/X.
 ### Popup UI (`popup.html` + `popup.js`)
 - Three-tab interface: Settings, Features & Test
   - **Settings Tab**: API provider configuration
-  - **Features Tab**: Platform-specific feature toggles (Twitter/YouTube)
+  - **Features Tab**: Platform-specific feature toggles and advanced settings
+    - Twitter/YouTube enable/disable toggles
+    - Page Translation Advanced Settings panel (collapsible)
+      - Max chars per chunk (500-32000)
+      - Max items per chunk (5-500)
+      - Chunks per pass (1-100)
+      - Delay between chunks (0-60000ms)
+      - Custom separator token
   - **Test Tab**: Translation testing interface
 - jQuery + Select2 for enhanced dropdowns with search functionality
 - Live API key validation
@@ -81,6 +90,9 @@ User Action → Content Script → Background Script → LLM API
 - **Twitter Integration**: Auto-injected translate buttons with JP icon
 - **YouTube Integration**: Per-comment translation buttons
 - **Page Translation**: Chunked processing with continuation UI
+  - Customizable chunk sizes and processing parameters
+  - User-configurable delays for rate limit management
+  - Custom separator tokens for special use cases
 - **Settings Sync**: Chrome storage with validation
 - **Error Handling**: User-friendly error messages with fallback and retry logic
 - **Local LLM Support**: Ollama and LM Studio integration
@@ -100,14 +112,25 @@ User Action → Content Script → Background Script → LLM API
 - Toggle translation display functionality
 - Feature can be disabled via Features tab
 
-## Recent Improvements (2025-08-09)
+### Page Translation Advanced Settings (New)
+- Accessible from Features tab with toggle button
+- Allows fine-tuning of translation performance:
+  - Chunk size control for API limits
+  - Processing speed adjustment
+  - Custom separators for edge cases
+- Settings persist across sessions
+- Safe value clamping prevents invalid configurations
+
+## Recent Improvements (2025-08-10)
+- **Advanced Page Translation Settings**: User-configurable chunk sizes, delays, and separators
+- **UI Polish**: Added margin above save buttons for better spacing
+- **Settings Flexibility**: Made hardcoded page translation parameters customizable
 - **YouTube Support**: Added comment-level translation buttons
 - **Feature Toggles**: Platform-specific enable/disable in Features tab
 - **Real-time Toggle**: Instant apply/remove of translation features
 - **Fallback Display**: chrome.scripting API for content script failures
 - **Page Translation Stability**: Small chunk sequential processing with UI feedback
 - **API Retry Logic**: Exponential backoff for 429/5xx errors
-- **UI Improvements**: Fixed Select2 issues and re-enabled search
 
 ## Technical Stack
 - Manifest V3 with ES modules
