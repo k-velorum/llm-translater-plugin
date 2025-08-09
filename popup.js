@@ -182,11 +182,11 @@ function loadProviderModels(provider, elements) {
   const modelSelect = elements[`${provider}ModelSelect`];
 
   if (provider === 'ollama') {
-    chrome.storage.sync.get(['ollamaServer'], async (settings) => {
+    chrome.storage.sync.get(['ollamaServer', 'ollamaModel'], async (settings) => {
       const server = settings.ollamaServer || 'http://localhost:11434';
       try {
         const models = await fetchModels(provider, { server });
-        populateModelSelect(provider, modelSelect, models);
+        populateModelSelect(provider, modelSelect, models, settings.ollamaModel || '');
       } catch (error) {
         console.info('Ollamaモデル一覧の取得に失敗:', error);
         // 失敗時は空のまま
@@ -196,12 +196,12 @@ function loadProviderModels(provider, elements) {
   }
 
   if (provider === 'lmstudio') {
-    chrome.storage.sync.get(['lmstudioServer', 'lmstudioApiKey'], async (settings) => {
+    chrome.storage.sync.get(['lmstudioServer', 'lmstudioApiKey', 'lmstudioModel'], async (settings) => {
       const server = settings.lmstudioServer || 'http://localhost:1234';
       const apiKey = settings.lmstudioApiKey || '';
       try {
         const models = await fetchModels(provider, { server, apiKey });
-        populateModelSelect(provider, modelSelect, models);
+        populateModelSelect(provider, modelSelect, models, settings.lmstudioModel || '');
       } catch (error) {
         console.info('LM Studioモデル一覧の取得に失敗:', error);
         // 失敗時は空のまま
@@ -211,12 +211,13 @@ function loadProviderModels(provider, elements) {
   }
 
   const apiKeyKey = `${provider}ApiKey`;
+  const modelKey = `${provider}Model`;
   // 保存されているAPIキーを取得
-  chrome.storage.sync.get([apiKeyKey], async (settings) => {
+  chrome.storage.sync.get([apiKeyKey, modelKey], async (settings) => {
     if (settings[apiKeyKey]) {
       try {
         const models = await fetchModels(provider, { apiKey: settings[apiKeyKey] });
-        populateModelSelect(provider, modelSelect, models);
+        populateModelSelect(provider, modelSelect, models, settings[modelKey] || '');
       } catch (error) {
         console.error(`${provider}モデル一覧の取得に失敗:`, error);
         // エラー時はデフォルトモデルを設定
@@ -230,7 +231,7 @@ function loadProviderModels(provider, elements) {
       if (provider === 'openrouter') {
         try {
           const models = await fetchModels(provider);
-          populateModelSelect(provider, modelSelect, models);
+          populateModelSelect(provider, modelSelect, models, settings[modelKey] || '');
         } catch (error) {
           console.error('公開APIからのOpenRouterモデル一覧の取得に失敗:', error);
         }
@@ -282,7 +283,7 @@ function fetchModelsViaBackground(provider, options) {
 }
 
 // モデル選択要素にモデル一覧をセット
-function populateModelSelect(provider, selectElement, models) {
+function populateModelSelect(provider, selectElement, models, preferredValue = '') {
   // 現在選択されているモデルを保存
   const selectedModel = selectElement.value;
   
@@ -291,6 +292,12 @@ function populateModelSelect(provider, selectElement, models) {
   
   if (models && models.length > 0) {
     // 取得したモデルでオプションを生成
+    // プレースホルダー（空）を先頭に追加して、未選択状態を維持できるようにする
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '';
+    selectElement.appendChild(emptyOption);
+
     models.forEach(model => {
       const option = document.createElement('option');
       option.value = model.id;
@@ -303,15 +310,24 @@ function populateModelSelect(provider, selectElement, models) {
     });
 
     // 前回選択していたモデルがあれば選択状態を復元
-    if (selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel)) {
-      selectElement.value = selectedModel;
+    let valueToSet = '';
+    const hasPreferred = preferredValue && Array.from(selectElement.options).some(opt => opt.value === preferredValue);
+    const hasPrev = selectedModel && Array.from(selectElement.options).some(opt => opt.value === selectedModel);
+    if (hasPreferred) {
+      valueToSet = preferredValue;
+    } else if (hasPrev) {
+      valueToSet = selectedModel;
     }
+    if (valueToSet) selectElement.value = valueToSet;
+
     if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-      // DOMをクリーンにするため再初期化
+      // DOMをクリーンにするため再初期化（選択値設定後に行う）
       setupOrResetSelect2($(selectElement));
-      $(selectElement).trigger('change');
-      const modelData = $(selectElement).find(`option[value="${selectElement.value}"]`).data('model');
-      if (modelData) updateModelInfo(provider, modelData);
+      if (valueToSet) {
+        $(selectElement).trigger('change');
+        const modelData = $(selectElement).find(`option[value="${valueToSet}"]`).data('model');
+        if (modelData) updateModelInfo(provider, modelData);
+      }
     }
   } else {
     // モデルが取得できない場合はデフォルトモデルをセット
@@ -338,6 +354,12 @@ function setDefaultModels(provider, selectElement) {
   
   // デフォルトモデルでオプションを生成
   if (defaultModels[provider]) {
+    // プレースホルダー（空）
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '';
+    selectElement.appendChild(emptyOption);
+
     defaultModels[provider].forEach(model => {
     const option = document.createElement('option');
     option.value = model.id;
