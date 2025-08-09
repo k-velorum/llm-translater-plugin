@@ -605,3 +605,142 @@ document.addEventListener('DOMContentLoaded', () => {
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
   addTranslateButtonToTweets();
 }
+
+// =============================
+// YouTube コメント翻訳ボタン
+// =============================
+
+function addTranslateButtonToYouTubeComments() {
+  if (!/\.youtube\.com$/.test(window.location.hostname)) return;
+
+  const commentTextSelector = 'ytd-comment-view-model #content-text, ytd-comment-renderer #content-text';
+
+  // スタイル（スピナー）を一度だけ追加
+  const spinnerStyle = `
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .spinner { animation: rotate 1.5s linear infinite; display: none; }
+  `;
+  if (!document.querySelector('#llm-translator-styles')) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'llm-translator-styles';
+    styleElement.textContent = spinnerStyle;
+    document.head.appendChild(styleElement);
+  }
+
+  // 既存コメントにボタンを付与
+  document.querySelectorAll(commentTextSelector).forEach(addButtonToYouTubeComment);
+
+  // 動的に追加されるコメントも監視
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes || []) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        if (node.matches && node.matches(commentTextSelector)) {
+          addButtonToYouTubeComment(node);
+        } else {
+          const targets = node.querySelectorAll?.(commentTextSelector);
+          targets && targets.forEach(addButtonToYouTubeComment);
+        }
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function addButtonToYouTubeComment(contentTextEl) {
+  // 二重追加防止
+  if (!contentTextEl || contentTextEl.parentElement?.querySelector('.llm-yt-translate-button')) return;
+
+  // ボタン要素（Twitterと同じアイコンを使用）
+  const btn = document.createElement('div');
+  btn.className = 'llm-yt-translate-button';
+  btn.style.display = 'inline-flex';
+  btn.style.alignItems = 'center';
+  btn.style.cursor = 'pointer';
+  btn.style.color = 'rgb(83, 100, 113)';
+  btn.style.paddingLeft = '6px';
+  btn.style.userSelect = 'none';
+  btn.style.verticalAlign = 'middle';
+  btn.setAttribute('role', 'button');
+  btn.setAttribute('aria-label', '日本語翻訳');
+  btn.innerHTML = `
+    <svg class="translate-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+      <path d="M 3,6 A 5,5 0 0 1 8,1 L 16,1 A 5,5 0 0 1 21,6 L 21,14 A 5,5 0 0 1 16,19 L 14,19 L 12,23 L 10,19 L 8,19 A 5,5 0 0 1 3,14 Z" fill="#f8f8f8" stroke="#555" stroke-width="1"/>
+      <text x="12" y="13.5" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#555">JP</text>
+    </svg>
+    <svg class="spinner" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="margin-left:4px;">
+      <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
+    </svg>
+  `;
+
+  const translateIcon = btn.querySelector('.translate-icon');
+  const spinner = btn.querySelector('.spinner');
+
+  // 挿入位置: コメント本文直後（ボタンはアイコンのみ）
+  contentTextEl.insertAdjacentElement('afterend', btn);
+
+  btn.addEventListener('click', () => {
+    const existing = contentTextEl.parentElement?.querySelector('.llm-yt-translation');
+    if (existing) {
+      existing.remove();
+      // トグル解除: ボタンの見た目を初期化
+      btn.style.color = 'rgb(83, 100, 113)';
+      translateIcon.style.display = 'inline-block';
+      spinner.style.display = 'none';
+      return;
+    }
+
+    // ローディング表示
+    btn.style.color = '#1DA1F2';
+    translateIcon.style.display = 'none';
+    spinner.style.display = 'inline-block';
+
+    const text = contentTextEl.textContent || '';
+    chrome.runtime.sendMessage({ action: 'translateTweet', text }, (response) => {
+      const translatedText = response?.error
+        ? `翻訳エラー: ${response.error.message || '不明なエラー'}`
+        : response?.translatedText || '';
+      showYouTubeCommentTranslation(contentTextEl, translatedText);
+      btn.style.color = 'rgb(83, 100, 113)';
+      translateIcon.style.display = 'inline-block';
+      spinner.style.display = 'none';
+    });
+  });
+}
+
+function showYouTubeCommentTranslation(contentTextEl, translatedText) {
+  // 既存を削除してから表示
+  const parent = contentTextEl.parentElement || contentTextEl;
+  const prev = parent.querySelector('.llm-yt-translation');
+  if (prev) prev.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'llm-yt-translation';
+  wrap.style.marginTop = '6px';
+  wrap.style.padding = '8px 10px';
+  wrap.style.background = '#f2f5f9';
+  wrap.style.borderRadius = '8px';
+  wrap.style.fontSize = '13px';
+  wrap.style.color = '#0f0f0f';
+  wrap.style.whiteSpace = 'pre-wrap';
+  wrap.style.wordBreak = 'break-word';
+
+  const isErr = ErrorUtils.isTranslationError(translatedText);
+  if (isErr) {
+    wrap.style.background = '#fff0f0';
+    wrap.style.color = '#b00020';
+    wrap.style.fontFamily = 'monospace';
+  }
+
+  wrap.textContent = translatedText;
+  contentTextEl.insertAdjacentElement('afterend', wrap);
+}
+
+// ページ読み込み時/即時実行
+document.addEventListener('DOMContentLoaded', () => {
+  addTranslateButtonToYouTubeComments();
+});
+
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
+  addTranslateButtonToYouTubeComments();
+}
