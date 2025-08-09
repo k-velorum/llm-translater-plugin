@@ -102,7 +102,8 @@ function setupOrResetSelect2($select) {
     dropdownParent: $parent.length ? $parent : undefined,
     templateResult: formatModelOption,
     templateSelection: formatModelSelection,
-    minimumResultsForSearch: Infinity
+    // 検索を有効化（常時表示）
+    minimumResultsForSearch: 0
   });
 }
 
