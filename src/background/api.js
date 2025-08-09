@@ -1,7 +1,8 @@
 import { DEFAULT_SETTINGS } from './settings.js';
 
 // 共通プロンプト/ヘッダー
-const TRANSLATE_PROMPT = '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。';
+// ページ全体翻訳で使用する特殊区切りトークン [[[SEP]]] を絶対に変更・翻訳しない旨を明示して安定性を高める
+const TRANSLATE_PROMPT = '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。特殊区切りトークン [[[SEP]]] が含まれる場合、それらは絶対に削除・翻訳・変更せず、そのまま出力に保持してください。トークンの数と順序も厳密に維持してください。';
 const OPENROUTER_HEADERS_BASE = {
   'HTTP-Referer': 'chrome-extension://llm-translator',
   'X-Title': 'LLM Translation Plugin'
@@ -54,43 +55,69 @@ ${error.stack ? '\nスタックトレース:\n' + error.stack : ''}
 
 // APIリクエスト共通処理
 export async function makeApiRequest(url, options, errorMessage, logLevel = 'error') {
-  try {
-    const response = await fetch(url, options);
+  const logger = (console[logLevel] || console.error).bind(console);
 
-    if (!response.ok) {
-      // Ollama の CORS で 403 が出やすいため、分かりやすいヒントを付与
-      if (response.status === 403 && /\/api\/(generate|tags)/.test(url)) {
-        throw new Error(
-          'API Error: 403 Forbidden - おそらくOllamaのCORS設定が原因です。\n' +
-          '環境変数 OLLAMA_ORIGINS を設定してサーバーを起動してください。例:\n' +
-          '  macOS/Linux:  OLLAMA_ORIGINS=* ollama serve\n' +
-          '  Windows(PowerShell):  $env:OLLAMA_ORIGINS="*"; ollama serve\n' +
-          '特定の拡張IDのみ許可する場合は chrome-extension://<拡張ID> を指定してください。'
-        );
-      }
-      let errorText = '';
-      try {
-        const errorData = await response.json();
-        errorText = JSON.stringify(errorData);
-        console.error('エラーレスポンス:', errorData);
-        throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
-      } catch (parseError) {
-        try {
-          errorText = await response.text();
-          console.error('エラーテキスト:', errorText);
-        } catch (textError) {
-          errorText = 'レスポンステキストを取得できませんでした';
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        // Ollama の CORS で 403 が出やすいため、分かりやすいヒントを付与
+        if (response.status === 403 && /\/api\/(generate|tags)/.test(url)) {
+          throw new Error(
+            'API Error: 403 Forbidden - おそらくOllamaのCORS設定が原因です。\n' +
+            '環境変数 OLLAMA_ORIGINS を設定してサーバーを起動してください。例:\n' +
+            '  macOS/Linux:  OLLAMA_ORIGINS=* ollama serve\n' +
+            '  Windows(PowerShell):  $env:OLLAMA_ORIGINS="*"; ollama serve\n' +
+            '特定の拡張IDのみ許可する場合は chrome-extension://<拡張ID> を指定してください。'
+          );
         }
-        throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
-      }
-    }
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    const logger = (console[logLevel] || console.error).bind(console);
-    logger(`${errorMessage}:`, error);
-    throw error;
+        // 429/5xx はリトライ（Retry-After ヘッダを尊重）
+        if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+          const retryAfter = response.headers.get('Retry-After');
+          const baseDelay = retryAfter ? Math.min(5000, parseInt(retryAfter, 10) * 1000 || 0) : 0;
+          const backoff = baseDelay || Math.min(4000, 250 * Math.pow(2, attempt));
+          if (attempt < maxRetries) {
+            logger(`${errorMessage}: HTTP ${response.status} -> ${backoff}ms 待機後にリトライ (${attempt + 1}/${maxRetries})`);
+            await sleep(backoff);
+            continue; // リトライ
+          }
+        }
+
+        let errorText = '';
+        try {
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+          console.error('エラーレスポンス:', errorData);
+          throw new Error(`API Error: ${errorData.error?.message || response.statusText} (${response.status})`);
+        } catch (parseError) {
+          try {
+            errorText = await response.text();
+            console.error('エラーテキスト:', errorText);
+          } catch (textError) {
+            errorText = 'レスポンステキストを取得できませんでした';
+          }
+          throw new Error(`API Error: ${response.statusText} (${response.status}) - ${errorText}`);
+        }
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      // ネットワーク失敗は指数バックオフでリトライ
+      const isNetworkError = (error instanceof TypeError && error.message === 'Failed to fetch');
+      if (isNetworkError && attempt < maxRetries) {
+        const delay = Math.min(4000, 250 * Math.pow(2, attempt));
+        logger(`${errorMessage}: ネットワークエラー -> ${delay}ms 待機後にリトライ (${attempt + 1}/${maxRetries})`);
+        await sleep(delay);
+        continue;
+      }
+      logger(`${errorMessage}:`, error);
+      throw error;
+    }
   }
 }
 
@@ -250,4 +277,84 @@ export async function translateText(text, settings) {
   } else {
     return await translateWithGemini(text, settings);
   }
+}
+
+// 構造化バッチ翻訳（Gemini専用）。
+// 入力: texts: string[] -> 出力: translations: string[]（同じ長さ、足りない分は原文で埋める）
+export async function translateBatchStructured(texts, settings) {
+  if (settings.apiProvider !== 'gemini') {
+    throw new Error('structured batch translation is only implemented for Gemini provider for now');
+  }
+
+  if (!settings.geminiApiKey) {
+    throw new Error('Gemini APIキーが設定されていません');
+  }
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:generateContent?key=${settings.geminiApiKey}`;
+
+  // id で整合性を担保
+  const items = texts.map((t, i) => ({ id: i, text: t }));
+  const instr = [
+    'あなたは優秀な翻訳者です。与えられた JSON 配列 items の各要素を日本語に翻訳してください。',
+    '出力は JSON のみで、配列形式とし、各要素は {"id": number, "translation": string} のみを含めてください。',
+    '重要: 入力の id をそのまま維持し、出力配列の長さは入力と同じにします。不要な文字や説明文は一切出力しないでください。',
+    'HTMLタグやコードブロックなどのマークアップは保持し、意味を変えないように訳してください。',
+  ].join('\n');
+
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: instr + '\n\nitems = ' + JSON.stringify(items) }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      response_mime_type: 'application/json'
+    }
+  };
+
+  const data = await makeApiRequest(
+    apiUrl,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    'Gemini API (structured batch) リクエスト中にエラーが発生'
+  );
+
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  // JSON 抽出を頑健化: 最初にそのまま、だめなら JSON 部分っぽい範囲をサルベージ
+  function tryParseJson(s) {
+    try { return JSON.parse(s); } catch (_) {}
+    const match = s.match(/[\[{][\s\S]*[\]}]/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch (_) {}
+    }
+    return null;
+  }
+
+  const parsed = tryParseJson(text);
+  if (!parsed) {
+    throw new Error('構造化出力(JSON)の解析に失敗しました');
+  }
+
+  const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.items) ? parsed.items : null);
+  if (!arr) {
+    throw new Error('構造化出力に配列が見つかりません');
+  }
+
+  // id に基づき並べ替え/補完
+  const out = new Array(texts.length);
+  for (const it of arr) {
+    const id = it?.id;
+    const tr = (it?.translation ?? '').toString();
+    if (Number.isInteger(id) && id >= 0 && id < out.length) {
+      out[id] = tr.trim();
+    }
+  }
+  for (let i = 0; i < out.length; i++) {
+    if (typeof out[i] !== 'string' || out[i].length === 0) out[i] = texts[i];
+  }
+
+  return out;
 }

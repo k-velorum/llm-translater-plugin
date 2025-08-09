@@ -1,6 +1,9 @@
 // 翻訳結果を表示するためのポップアップ要素
 let translationPopup = null;
 
+// ページ全体翻訳のノードスナップショット（取得時と適用時の不一致を防ぐ）
+let pageTranslationSnapshot = { id: 0, nodes: [] };
+
 // 共通ユーティリティ関数
 const DOMUtils = {
   // テキストノードを取得するTreeWalkerを作成
@@ -146,19 +149,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   } else if (message.action === 'getPageTexts') {
     // ページ内のテキストノードを取得してバックグラウンドに返す
-    const texts = DOMUtils.getTextValues(document.body);
-    sendResponse({ texts: texts });
+    const nodes = DOMUtils.getTextNodes(document.body);
+    const texts = nodes.map(n => n.nodeValue);
+    // スナップショットを更新（連番IDで整合性確認）
+    pageTranslationSnapshot = {
+      id: (pageTranslationSnapshot.id || 0) + 1,
+      nodes
+    };
+    sendResponse({ texts, snapshotId: pageTranslationSnapshot.id });
     return true;
   } else if (message.action === 'applyPageTranslation') {
     // バックグラウンドから受け取った翻訳結果をページ内のテキストノードに適用
     const translations = message.translations;
-    const textNodes = DOMUtils.getTextNodes(document.body);
-    textNodes.forEach((node, index) => {
-      if (translations[index] !== undefined) {
-        node.nodeValue = translations[index];
+    const { snapshotId } = message;
+    let targetNodes = [];
+
+    // 取得時と同じ順序・同じノード集合を可能な限り用いる
+    if (snapshotId && snapshotId === pageTranslationSnapshot.id && Array.isArray(pageTranslationSnapshot.nodes) && pageTranslationSnapshot.nodes.length) {
+      targetNodes = pageTranslationSnapshot.nodes;
+    } else {
+      // フォールバック: 再トラバース（動的ページで多少のズレが出る可能性あり）
+      console.warn('applyPageTranslation: snapshotId が一致しないため再トラバースで適用します。');
+      targetNodes = DOMUtils.getTextNodes(document.body);
+    }
+
+    const len = Math.min(targetNodes.length, translations.length);
+    for (let i = 0; i < len; i++) {
+      if (translations[i] !== undefined && targetNodes[i] && targetNodes[i].nodeValue !== undefined) {
+        targetNodes[i].nodeValue = translations[i];
       }
-    });
+    }
     return;
+  } else if (message.action === 'applyPageTranslationChunk') {
+    // 逐次的に小チャンクでの訳文適用（設計見直しに合わせたモード）
+    const { snapshotId, offset = 0, translations = [] } = message;
+
+    if (!snapshotId || snapshotId !== pageTranslationSnapshot.id) {
+      console.warn('applyPageTranslationChunk: snapshotId 不一致のため適用をスキップします。');
+      return;
+    }
+
+    const nodes = pageTranslationSnapshot.nodes || [];
+    const end = Math.min(nodes.length, offset + translations.length);
+    for (let i = offset, j = 0; i < end; i++, j++) {
+      if (nodes[i] && nodes[i].nodeValue !== undefined && translations[j] !== undefined) {
+        nodes[i].nodeValue = translations[j];
+      }
+    }
+    return;
+  } else if (message.action === 'showPageTranslationControls') {
+    const { snapshotId, remainingChunks, processedItems, totalItems } = message;
+    showPageTranslationControls(snapshotId, remainingChunks, processedItems, totalItems);
+    return false;
+  } else if (message.action === 'hidePageTranslationControls') {
+    hidePageTranslationControls();
+    return false;
   }
   // 他のメッセージタイプは処理しないので false を返す
   return false;
@@ -248,6 +293,117 @@ function closePopupOnClickOutside(event) {
   if (translationPopup && !translationPopup.contains(event.target)) {
     removePopup();
   }
+}
+
+// 逐次翻訳の「続きを実行」UI
+let pageTranslationControls = null;
+let pageTranslationControlsSnapshotId = null;
+
+function showPageTranslationControls(snapshotId, remainingChunks, processedItems = 0, totalItems = 0) {
+  // 既存を更新/再作成
+  pageTranslationControlsSnapshotId = snapshotId;
+  if (!pageTranslationControls) {
+    const wrap = document.createElement('div');
+    wrap.id = 'llm-page-translation-controls';
+    wrap.style.position = 'fixed';
+    wrap.style.right = '16px';
+    wrap.style.bottom = '16px';
+    wrap.style.zIndex = '100000';
+    wrap.style.background = 'white';
+    wrap.style.border = '1px solid #ccc';
+    wrap.style.borderRadius = '8px';
+    wrap.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    wrap.style.padding = '10px 12px';
+    wrap.style.fontFamily = 'Arial, sans-serif';
+    wrap.style.fontSize = '13px';
+    wrap.style.color = '#333';
+
+    const info = document.createElement('div');
+    info.id = 'llm-page-translation-info';
+    info.style.marginBottom = '6px';
+
+    const progress = document.createElement('div');
+    progress.id = 'llm-page-translation-progress';
+    progress.style.marginBottom = '8px';
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '8px';
+
+    const btn = document.createElement('button');
+    btn.textContent = '続きを実行';
+    btn.style.padding = '6px 10px';
+    btn.style.border = '1px solid #888';
+    btn.style.borderRadius = '4px';
+    btn.style.background = '#f5f5f5';
+    btn.style.cursor = 'pointer';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = '実行中…';
+      try {
+        await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ action: 'continuePageTranslation', snapshotId }, (res) => {
+            if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+            if (!res || res.ok !== true) return reject(new Error(res?.error || 'unknown error'));
+            resolve();
+          });
+        });
+      } catch (e) {
+        console.error('continuePageTranslation 送信失敗:', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '続きを実行';
+      }
+    };
+
+    const stopBtn = document.createElement('button');
+    stopBtn.textContent = '停止';
+    stopBtn.style.padding = '6px 10px';
+    stopBtn.style.border = '1px solid #b00';
+    stopBtn.style.borderRadius = '4px';
+    stopBtn.style.background = '#ffeaea';
+    stopBtn.style.color = '#b00';
+    stopBtn.style.cursor = 'pointer';
+    stopBtn.onclick = async () => {
+      stopBtn.disabled = true;
+      try {
+        await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ action: 'cancelPageTranslation', snapshotId }, (res) => {
+            if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+            resolve();
+          });
+        });
+      } catch (e) {
+        console.error('cancelPageTranslation 送信失敗:', e);
+      } finally {
+        stopBtn.disabled = false;
+      }
+    };
+
+    row.appendChild(btn);
+    row.appendChild(stopBtn);
+
+    wrap.appendChild(info);
+    wrap.appendChild(progress);
+    wrap.appendChild(row);
+    document.body.appendChild(wrap);
+    pageTranslationControls = wrap;
+  }
+
+  // 更新
+  const info = pageTranslationControls.querySelector('#llm-page-translation-info');
+  const progress = pageTranslationControls.querySelector('#llm-page-translation-progress');
+  const percent = totalItems > 0 ? Math.floor((processedItems / totalItems) * 100) : 0;
+  if (info) info.textContent = `残りチャンク: ${remainingChunks}`;
+  if (progress) progress.textContent = `進捗: ${percent}% (${processedItems}/${totalItems})`;
+}
+
+function hidePageTranslationControls() {
+  if (pageTranslationControls && pageTranslationControls.parentNode) {
+    pageTranslationControls.parentNode.removeChild(pageTranslationControls);
+  }
+  pageTranslationControls = null;
+  pageTranslationControlsSnapshotId = null;
 }
 
 // Twitter（x.com）のツイート翻訳機能
