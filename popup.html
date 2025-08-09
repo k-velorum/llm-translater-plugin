@@ -228,6 +228,7 @@
   
   <div class="tabs">
     <div class="tab active" data-tab="settings">設定</div>
+    <div class="tab" data-tab="features">機能</div>
     <div class="tab" data-tab="test">テスト</div>
   </div>
   
@@ -316,6 +317,26 @@
     
     <button id="save-button">設定を保存</button>
     <div id="status-message" class="status hidden"></div>
+  </div>
+  
+  <div id="features-tab" class="tab-content">
+    <div class="api-section">
+      <div class="api-heading">プラットフォーム連携</div>
+      <div class="form-group">
+        <label style="font-weight: normal; display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="enable-twitter-translation" />
+          Twitter(X) ツイート翻訳ボタンを表示
+        </label>
+      </div>
+      <div class="form-group">
+        <label style="font-weight: normal; display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="enable-youtube-translation" />
+          YouTube コメント翻訳ボタンを表示
+        </label>
+      </div>
+    </div>
+    <button id="feature-save-button">機能の設定を保存</button>
+    <div id="feature-status-message" class="status hidden"></div>
   </div>
   
   <div id="test-tab" class="tab-content">

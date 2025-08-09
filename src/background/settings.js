@@ -12,6 +12,9 @@ export const DEFAULT_SETTINGS = {
   lmstudioServer: 'http://localhost:1234',
   lmstudioModel: '',
   lmstudioApiKey: '',
+  // プラットフォーム別 機能有効/無効
+  enableTwitterTranslation: true,
+  enableYoutubeTranslation: true,
   // Anthropic / プロキシ機能は削除済み
 };
 

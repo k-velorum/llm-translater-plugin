@@ -402,6 +402,11 @@ function getElements() {
     lmstudioModelSelect: document.getElementById('lmstudio-model'),
     saveButton: document.getElementById('save-button'),
     statusMessage: document.getElementById('status-message'),
+    featureStatusMessage: document.getElementById('feature-status-message'),
+    // 機能タブ要素
+    twitterFeatureCheckbox: document.getElementById('enable-twitter-translation'),
+    youtubeFeatureCheckbox: document.getElementById('enable-youtube-translation'),
+    featureSaveButton: document.getElementById('feature-save-button'),
     // テスト用要素
     testApiProviderSelect: document.getElementById('test-api-provider'),
     testTextArea: document.getElementById('test-text'),
@@ -488,9 +493,10 @@ function createProviderVerificationUI(provider, apiKeyInput) {
 }
 
 function bindEventHandlers(elements) {
-  const { saveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect } = elements;
+  const { saveButton, featureSaveButton, testButton, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect } = elements;
   
   saveButton.addEventListener('click', () => saveSettings(elements));
+  if (featureSaveButton) featureSaveButton.addEventListener('click', () => saveFeatureSettings(elements));
   testButton.addEventListener('click', () => testApi(elements));
   
   // APIキーが変更されたときにモデル一覧を更新
@@ -524,6 +530,18 @@ function bindEventHandlers(elements) {
   };
   lmstudioServerInput.addEventListener('change', refreshLmstudioModels);
   lmstudioApiKeyInput.addEventListener('change', refreshLmstudioModels);
+}
+
+// 機能タブの設定保存（Twitter / YouTube 有効化）
+function saveFeatureSettings({ twitterFeatureCheckbox, youtubeFeatureCheckbox, featureStatusMessage }) {
+  const partial = {
+    enableTwitterTranslation: !!(twitterFeatureCheckbox && twitterFeatureCheckbox.checked),
+    enableYoutubeTranslation: !!(youtubeFeatureCheckbox && youtubeFeatureCheckbox.checked)
+  };
+  chrome.storage.sync.set(partial, () => {
+    const target = featureStatusMessage || document.getElementById('feature-status-message') || document.getElementById('status-message');
+    showStatus(target, '機能設定を保存しました', true);
+  });
 }
 
 // APIキー検証処理（常にバックグラウンド経由）
@@ -592,7 +610,9 @@ function loadSettings({
   lmstudioSection,
   lmstudioServerInput,
   lmstudioApiKeyInput,
-  lmstudioModelSelect
+  lmstudioModelSelect,
+  twitterFeatureCheckbox,
+  youtubeFeatureCheckbox
 }) {
   chrome.storage.sync.get(
     null,
@@ -607,6 +627,10 @@ function loadSettings({
       lmstudioServerInput.value = settings.lmstudioServer || 'http://localhost:1234';
       lmstudioApiKeyInput.value = settings.lmstudioApiKey || '';
       lmstudioModelSelect.value = settings.lmstudioModel || '';
+
+      // 機能オン/オフの復元（デフォルトtrue）
+      if (twitterFeatureCheckbox) twitterFeatureCheckbox.checked = settings.enableTwitterTranslation !== false;
+      if (youtubeFeatureCheckbox) youtubeFeatureCheckbox.checked = settings.enableYoutubeTranslation !== false;
       
       // APIプロバイダーに応じたセクションの表示制御
       const sections = {
@@ -631,7 +655,7 @@ function loadSettings({
 }
 
 // 設定の保存
-function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect, statusMessage }) {
+function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterModelSelect, geminiApiKeyInput, geminiModelSelect, ollamaServerInput, ollamaModelSelect, lmstudioServerInput, lmstudioApiKeyInput, lmstudioModelSelect, statusMessage, twitterFeatureCheckbox, youtubeFeatureCheckbox }) {
   const settings = {
     apiProvider: apiProviderSelect.value,
     openrouterApiKey: openrouterApiKeyInput.value.trim(),
@@ -644,6 +668,10 @@ function saveSettings({ apiProviderSelect, openrouterApiKeyInput, openrouterMode
     lmstudioApiKey: lmstudioApiKeyInput.value.trim(),
     lmstudioModel: lmstudioModelSelect.value
   };
+
+  // 機能タブの値も併せて保存（存在する場合）
+  if (twitterFeatureCheckbox) settings.enableTwitterTranslation = !!twitterFeatureCheckbox.checked;
+  if (youtubeFeatureCheckbox) settings.enableYoutubeTranslation = !!youtubeFeatureCheckbox.checked;
 
   const validation = PopupUtils.validateApiKey(settings.apiProvider, settings);
   

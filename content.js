@@ -1,6 +1,49 @@
 // 翻訳結果を表示するためのポップアップ要素
 let translationPopup = null;
 
+// プラットフォーム別機能設定（デフォルト: 有効）
+let featureSettings = {
+  enableTwitterTranslation: true,
+  enableYoutubeTranslation: true
+};
+
+function loadFeatureSettings(callback) {
+  try {
+    chrome.storage?.sync?.get?.(null, (settings) => {
+      if (!settings) return;
+      if (typeof settings.enableTwitterTranslation === 'boolean') featureSettings.enableTwitterTranslation = settings.enableTwitterTranslation;
+      if (typeof settings.enableYoutubeTranslation === 'boolean') featureSettings.enableYoutubeTranslation = settings.enableYoutubeTranslation;
+      if (typeof callback === 'function') {
+        try { callback(); } catch (_) {}
+      }
+    });
+  } catch (_) { if (typeof callback === 'function') try { callback(); } catch(__) {} }
+}
+
+// 設定変更監視（有効化/無効化を即時反映）
+try {
+  chrome.storage?.onChanged?.addListener?.((changes, area) => {
+    if (area !== 'sync') return;
+    let twitterChanged = false, youtubeChanged = false;
+    if (Object.prototype.hasOwnProperty.call(changes, 'enableTwitterTranslation')) {
+      featureSettings.enableTwitterTranslation = !!changes.enableTwitterTranslation.newValue;
+      twitterChanged = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, 'enableYoutubeTranslation')) {
+      featureSettings.enableYoutubeTranslation = !!changes.enableYoutubeTranslation.newValue;
+      youtubeChanged = true;
+    }
+    if (twitterChanged) {
+      if (!featureSettings.enableTwitterTranslation) { try { tweetObserver?.disconnect(); } catch(_) {} tweetObserver = null; document.querySelectorAll('.llm-translate-button, .llm-tweet-translation').forEach(n => n.remove()); }
+      else { addTranslateButtonToTweets(); }
+    }
+    if (youtubeChanged) {
+      if (!featureSettings.enableYoutubeTranslation) { try { ytObserver?.disconnect(); } catch(_) {} ytObserver = null; document.querySelectorAll('.llm-yt-translate-button, .llm-yt-translation').forEach(n => n.remove()); }
+      else { addTranslateButtonToYouTubeComments(); }
+    }
+  });
+} catch (_) {}
+
 // ページ全体翻訳のノードスナップショット（取得時と適用時の不一致を防ぐ）
 let pageTranslationSnapshot = { id: 0, nodes: [] };
 
@@ -298,6 +341,9 @@ function closePopupOnClickOutside(event) {
 // 逐次翻訳の「続きを実行」UI
 let pageTranslationControls = null;
 let pageTranslationControlsSnapshotId = null;
+// プラットフォーム監視インスタンス（無効化時の停止用）
+let tweetObserver = null;
+let ytObserver = null;
 
 function showPageTranslationControls(snapshotId, remainingChunks, processedItems = 0, totalItems = 0, totalChunks = 0, canContinue = true) {
   // 既存を更新/再作成
@@ -420,6 +466,8 @@ function addTranslateButtonToTweets() {
   if (!window.location.hostname.includes('twitter.com') && !window.location.hostname.includes('x.com')) {
     return;
   }
+  // 機能が無効ならスキップ
+  if (!featureSettings.enableTwitterTranslation) return;
 
   console.log('Twitter/X.comページを検出しました。翻訳ボタンを追加します。');
 
@@ -430,7 +478,8 @@ function addTranslateButtonToTweets() {
   document.querySelectorAll(tweetSelector).forEach(addButtonToTweet);
 
   // MutationObserverを使用して新しく追加されるツイートを監視
-  const observer = new MutationObserver((mutations) => {
+  if (tweetObserver) return;
+  tweetObserver = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       if (mutation.addedNodes && mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => {
@@ -450,7 +499,7 @@ function addTranslateButtonToTweets() {
   });
 
   // body全体を監視
-  observer.observe(document.body, {
+  tweetObserver.observe(document.body, {
     childList: true,
     subtree: true
   });
@@ -598,12 +647,18 @@ function showTweetTranslation(tweetElement, tweetTextElement, translatedText) {
 
 // ページ読み込み完了時に実行
 document.addEventListener('DOMContentLoaded', () => {
-  addTranslateButtonToTweets();
+  loadFeatureSettings(() => {
+    addTranslateButtonToTweets();
+    addTranslateButtonToYouTubeComments();
+  });
 });
 
 // すでにDOMが読み込まれている場合のために即時実行も行う
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
-  addTranslateButtonToTweets();
+  loadFeatureSettings(() => {
+    addTranslateButtonToTweets();
+    addTranslateButtonToYouTubeComments();
+  });
 }
 
 // =============================
@@ -612,6 +667,8 @@ if (document.readyState === 'interactive' || document.readyState === 'complete')
 
 function addTranslateButtonToYouTubeComments() {
   if (!/\.youtube\.com$/.test(window.location.hostname)) return;
+  // 機能が無効ならスキップ
+  if (!featureSettings.enableYoutubeTranslation) return;
 
   const commentTextSelector = 'ytd-comment-view-model #content-text, ytd-comment-renderer #content-text';
 
@@ -631,7 +688,8 @@ function addTranslateButtonToYouTubeComments() {
   document.querySelectorAll(commentTextSelector).forEach(addButtonToYouTubeComment);
 
   // 動的に追加されるコメントも監視
-  const observer = new MutationObserver((mutations) => {
+  if (ytObserver) return;
+  ytObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of m.addedNodes || []) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -644,7 +702,7 @@ function addTranslateButtonToYouTubeComments() {
       }
     }
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  ytObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function addButtonToYouTubeComment(contentTextEl) {
@@ -736,11 +794,4 @@ function showYouTubeCommentTranslation(contentTextEl, translatedText) {
   contentTextEl.insertAdjacentElement('afterend', wrap);
 }
 
-// ページ読み込み時/即時実行
-document.addEventListener('DOMContentLoaded', () => {
-  addTranslateButtonToYouTubeComments();
-});
-
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
-  addTranslateButtonToYouTubeComments();
-}
+// (重複していたYouTubeの即時実行は、全体の初期化に統合済み)
