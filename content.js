@@ -683,6 +683,16 @@ function addTranslateButtonToYouTubeComments() {
     styleElement.textContent = spinnerStyle;
     document.head.appendChild(styleElement);
   }
+  // YouTubeのコメント折りたたみによる高さ制限を回避するためのスタイル（1回だけ追加）
+  if (!document.querySelector('#llm-yt-translation-styles')) {
+    const styleElement = document.createElement('style');
+    styleElement.id = 'llm-yt-translation-styles';
+    styleElement.textContent = `
+      /* 翻訳枠は高さ制限なしで表示 */
+      .llm-yt-translation { max-height: none !important; overflow: visible !important; display: block; white-space: pre-wrap; }
+    `;
+    document.head.appendChild(styleElement);
+  }
 
   // 既存コメントにボタンを付与
   document.querySelectorAll(commentTextSelector).forEach(addButtonToYouTubeComment);
@@ -738,7 +748,9 @@ function addButtonToYouTubeComment(contentTextEl) {
   contentTextEl.insertAdjacentElement('afterend', btn);
 
   btn.addEventListener('click', () => {
-    const existing = contentTextEl.parentElement?.querySelector('.llm-yt-translation');
+    // コメント全体を囲う最上位のコメント要素を基準にトグル判定する
+    const container = contentTextEl.closest('ytd-comment-view-model, ytd-comment-renderer') || contentTextEl.parentElement;
+    const existing = container?.querySelector('.llm-yt-translation');
     if (existing) {
       existing.remove();
       // トグル解除: ボタンの見た目を初期化
@@ -767,9 +779,9 @@ function addButtonToYouTubeComment(contentTextEl) {
 }
 
 function showYouTubeCommentTranslation(contentTextEl, translatedText) {
-  // 既存を削除してから表示
-  const parent = contentTextEl.parentElement || contentTextEl;
-  const prev = parent.querySelector('.llm-yt-translation');
+  // 既存を削除してから表示（コメント単位で1つだけ）
+  const container = contentTextEl.closest('ytd-comment-view-model, ytd-comment-renderer') || contentTextEl.parentElement || contentTextEl;
+  const prev = container.querySelector('.llm-yt-translation');
   if (prev) prev.remove();
 
   const wrap = document.createElement('div');
@@ -782,6 +794,9 @@ function showYouTubeCommentTranslation(contentTextEl, translatedText) {
   wrap.style.color = '#0f0f0f';
   wrap.style.whiteSpace = 'pre-wrap';
   wrap.style.wordBreak = 'break-word';
+  // 高さ制限をかけない
+  wrap.style.maxHeight = 'none';
+  wrap.style.overflow = 'visible';
 
   const isErr = ErrorUtils.isTranslationError(translatedText);
   if (isErr) {
@@ -791,7 +806,16 @@ function showYouTubeCommentTranslation(contentTextEl, translatedText) {
   }
 
   wrap.textContent = translatedText;
-  contentTextEl.insertAdjacentElement('afterend', wrap);
+
+  // YouTubeのコメント本文はytd-expander配下で折りたたまれていることがあるので、
+  // その直後（expanderの外側）に挿入して高さ制限の影響を受けないようにする。
+  const expander = contentTextEl.closest('ytd-expander');
+  if (expander && expander.parentElement) {
+    expander.insertAdjacentElement('afterend', wrap);
+  } else {
+    // フォールバック: 元要素の直後
+    contentTextEl.insertAdjacentElement('afterend', wrap);
+  }
 }
 
 // (重複していたYouTubeの即時実行は、全体の初期化に統合済み)
