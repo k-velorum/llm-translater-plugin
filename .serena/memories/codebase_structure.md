@@ -1,51 +1,109 @@
 # Codebase Structure
 
-## Project Root
+## Root Directory
 ```
 /
-├── manifest.json          # Chrome Extension Manifest V3
+├── manifest.json          # Chrome Extension manifest (V3)
 ├── background.js          # Service worker entry point (ES module)
-├── content.js            # Content script for page injection
-├── popup.html            # Settings UI HTML
-├── popup.js              # Settings UI logic with jQuery/Select2
-├── README.md             # Project documentation
+├── content.js            # Content script for web page injection
+├── popup.html            # Extension popup UI
+├── popup.js              # Popup UI logic
+├── README.md             # Japanese documentation
 ├── CLAUDE.md             # AI assistant instructions
-└── create_icons.sh       # Icon generation script
+├── PROJECT_WIKI.md       # Project documentation
+├── create_icons.sh       # Icon generation script
+├── .gitignore            # Git ignore file
+└── required.md           # Requirements documentation
 ```
 
-## Source Directories
+## /src/background/ Directory
 ```
-/src/background/          # Modularized background scripts
-├── api.js               # LLM API communication layer
-├── message-handlers.js  # Chrome runtime message processing
-├── settings.js          # Chrome storage sync management
-└── event-listeners.js   # Extension event handlers
-```
-
-## Assets
-```
-/icons/                   # Extension icons
-├── icon.svg             # Source vector icon
-├── icon16.png           # 16x16 toolbar icon
-├── icon48.png           # 48x48 extension icon
-└── icon128.png          # 128x128 store icon
-
-/lib/                     # Third-party libraries
-├── jquery-3.6.0.min.js
-├── select2.min.js
-└── select2.min.css
+/src/background/
+├── api.js                # LLM API communication
+├── message-handlers.js   # Chrome runtime message processing
+├── settings.js           # Settings management & validation
+└── event-listeners.js    # Chrome events (install, context menu, shortcuts)
 ```
 
-## Data Flow Architecture
-1. **User Interaction Layer**: Web page → Content script
-2. **Message Layer**: Content script ↔ Background script (chrome.runtime)
-3. **API Layer**: Background script → LLM APIs (OpenRouter/Gemini)
-4. **Storage Layer**: Settings ↔ chrome.storage.sync
-5. **UI Layer**: Popup → Background script → Storage
+## /icons/ Directory
+```
+/icons/
+├── icon.svg              # Base SVG icon
+├── icon16.png            # 16x16 PNG icon
+├── icon48.png            # 48x48 PNG icon
+├── icon128.png           # 128x128 PNG icon
+└── README.md             # Icon generation instructions
+```
 
-## Key Files Overview
-- **background.js**: Imports and initializes all background modules
-- **src/background/api.js**: Core translation logic, API calls, error handling
-- **src/background/message-handlers.js**: Handles translate, validate, fetch-models messages
-- **content.js**: Selection handling, popup creation, Twitter button injection
-- **popup.js**: Settings form, API validation, model selection UI
+## /lib/ Directory
+```
+/lib/
+├── jquery-3.7.1.min.js   # jQuery library
+├── select2.min.js        # Select2 dropdown library
+└── select2.min.css       # Select2 styles
+```
+
+## Key Import/Export Relationships
+
+### background.js
+- Imports from all /src/background/ modules
+- Sets up chrome.runtime.onMessage listener
+- Initializes extension on install/startup
+
+### src/background/api.js
+- Exports: `translateText()`, `translateBatchStructured()`, `makeApiRequest()`, `formatErrorDetails()`
+- Contains provider-specific translation functions
+- Handles API communication and error recovery
+
+### src/background/message-handlers.js
+- Exports: `handleMessage()`
+- Processes messages: translate, getSettings, saveSettings, testApi, fetchModels, validateApiKey
+- Routes to appropriate functions
+
+### src/background/settings.js
+- Exports: `DEFAULT_SETTINGS`, `getSettings()`, `saveSettings()`, `validateApiKey()`, `fetchAvailableModels()`
+- Manages chrome.storage.sync
+- Handles API key validation and model fetching
+
+### src/background/event-listeners.js
+- Exports: `setupEventListeners()`
+- Manages: context menus, keyboard shortcuts, page translation sessions
+- Handles fallback display via chrome.scripting
+
+### content.js
+- No exports (injected script)
+- Creates translation UI elements
+- Handles Twitter/YouTube button injection
+- Manages page translation with chunking
+- Uses MutationObserver for dynamic content
+
+### popup.js
+- No exports (UI script)
+- Manages three-tab interface
+- Handles settings save/load
+- Uses jQuery and Select2 for UI enhancements
+
+## Chrome Extension Permissions
+- activeTab: Access to current tab
+- contextMenus: Right-click menu integration
+- storage: Settings persistence
+- scripting: Fallback content injection
+- Host permissions: <all_urls> for API access
+
+## Message Flow Architecture
+1. User triggers action (selection, button click, shortcut)
+2. Content script sends message via chrome.runtime.sendMessage
+3. Background script receives in message-handlers.js
+4. API call made through api.js
+5. Response sent back to content script
+6. UI updated with translation result
+
+## Storage Keys
+- `apiProvider`: Current provider (openrouter/gemini/ollama/lmstudio)
+- `{provider}ApiKey`: API keys
+- `{provider}Model`: Selected models
+- `{provider}Server`: Server URLs (local providers)
+- `enableTwitterTranslation`: Twitter feature toggle
+- `enableYoutubeTranslation`: YouTube feature toggle
+- `translationSystemPrompt`: Custom system prompt
+- `page*`: Page translation settings (separator, chunks, delays)

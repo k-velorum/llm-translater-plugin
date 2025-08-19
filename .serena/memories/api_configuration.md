@@ -1,141 +1,74 @@
 # API Configuration
 
-## OpenRouter API
-### Endpoints
-- **Chat Completions**: `https://openrouter.ai/api/v1/chat/completions`
-- **Models List**: `https://openrouter.ai/api/v1/models`
+## API Providers
 
-### Request Structure
-```javascript
-{
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': chrome.runtime.getURL(''),
-    'X-Title': 'LLM Translation Plugin'
-  },
-  body: JSON.stringify({
-    model: selectedModel,
-    messages: [
-      { role: 'system', content: TRANSLATE_PROMPT },
-      { role: 'user', content: textToTranslate }
-    ],
-    temperature: 0.7,
-    max_tokens: 2000
-  })
-}
-```
+### 1. OpenRouter API
+- **Endpoint**: https://openrouter.ai/api/v1/chat/completions
+- **Authentication**: Bearer token in Authorization header
+- **Key Storage**: `settings.openrouterApiKey`
+- **Model Storage**: `settings.openrouterModel`
+- **Default Models**:
+  - openai/gpt-4o-mini
+  - anthropic/claude-3-5-haiku-latest
+  - anthropic/claude-3-7-sonnet-latest
+- **Model List Endpoint**: https://openrouter.ai/api/v1/models
+- **Error Handling**: Retry on 429/5xx with exponential backoff
 
-### Available Models
-- Dynamic fetching from API
-- Fallback defaults: gpt-4o-mini, anthropic/claude-3.5-haiku, anthropic/claude-3-5-sonnet-20241022
-- Model format: `provider/model-name` or `model-name`
+### 2. Google Gemini API
+- **Endpoint**: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+- **Authentication**: API key as query parameter (?key=)
+- **Key Storage**: `settings.geminiApiKey`
+- **Model Storage**: `settings.geminiModel`
+- **Default Model**: gemini-1.5-flash
+- **Model List Endpoint**: https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}
+- **Batch Support**: `translateBatchStructured()` for multiple texts
+- **Special Features**: Structured JSON output for batch translations
 
-## Google Gemini API
-### Endpoints
-- **Generate Content**: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}`
-- **Models List**: `https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}`
+### 3. Ollama (Local)
+- **Endpoint**: http://localhost:11434/api/chat
+- **Server Setting**: `settings.ollamaServer` (default: http://localhost:11434)
+- **Model Storage**: `settings.ollamaModel`
+- **Authentication**: None required
+- **Model List Endpoint**: {server}/api/tags
+- **CORS Requirement**: Set OLLAMA_ORIGINS environment variable
+- **Error Handling**: User-friendly messages for connection issues
 
-### Request Structure
-```javascript
-{
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    contents: [{
-      parts: [{
-        text: `${TRANSLATE_PROMPT}\n\nテキスト：\n${textToTranslate}`
-      }]
-    }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 2000
-    }
-  })
-}
-```
+### 4. LM Studio (OpenAI Compatible)
+- **Endpoint**: http://localhost:1234/v1/chat/completions
+- **Server Setting**: `settings.lmstudioServer` (default: http://localhost:1234)
+- **Model Storage**: `settings.lmstudioModel`
+- **Authentication**: Optional API key in `settings.lmstudioApiKey`
+- **Model List Endpoint**: {server}/v1/models
+- **OpenAI Compatible**: Uses standard OpenAI API format
 
-### Available Models
-- Dynamic fetching via API
-- Default: gemini-1.5-flash
-- Filter: Only models supporting `generateContent` method
+## Key Files and Functions
 
-## Ollama (Local LLM)
-### Endpoints
-- **Generate**: `http://localhost:11434/api/generate`
-- **Models List**: `http://localhost:11434/api/tags`
+### src/background/api.js
+- `translateText(text, settings)`: Main translation function
+- `translateBatchStructured(texts, settings)`: Batch translation (Gemini only)
+- `makeApiRequest(url, options, errorMessage, logLevel)`: HTTP request wrapper
+- `formatErrorDetails(error, settings)`: Error formatting with API key masking
+- `getSystemPrompt(settings)`: Returns custom or default system prompt
 
-### Request Structure
-```javascript
-{
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    model: selectedModel,
-    prompt: `${TRANSLATE_PROMPT}\n\nテキスト：\n${textToTranslate}`,
-    stream: false
-  })
-}
-```
+### src/background/settings.js
+- `validateApiKey(apiKey, apiProvider)`: API key validation
+- `fetchAvailableModels(apiProvider, apiKey, server)`: Dynamic model fetching
+- Default settings and storage management
 
-### Available Models
-- Dynamic fetching from local server
-- No authentication required
+## Translation System Prompt
+- Customizable via Features tab
+- Default: "あなたは優秀な日本語翻訳者です。与えられたテキストを自然で読みやすい日本語に翻訳してください。専門用語は適切に処理し、文脈を考慮して最適な翻訳を提供してください。"
+- Stored in `settings.translationSystemPrompt`
 
-## LM Studio (OpenAI Compatible)
-### Endpoints
-- **Chat Completions**: `http://localhost:1234/v1/chat/completions`
-- **Models List**: `http://localhost:1234/v1/models`
+## Page Translation Settings
+- **Separator Token**: `settings.pageSeparatorToken` (default: "[[[SEP]]]")
+- **Max Chars per Chunk**: `settings.pageMaxCharsPerChunk` (default: 8000)
+- **Max Items per Chunk**: `settings.pageMaxItemsPerChunk` (default: 50)
+- **Chunks per Pass**: `settings.pageChunksPerPass` (default: 5)
+- **Delay Between Chunks**: `settings.pageDelayBetweenChunks` (default: 1000ms)
 
-### Request Structure
-```javascript
-{
-  method: 'POST',
-  headers: {
-    'Authorization': apiKey ? `Bearer ${apiKey}` : undefined,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    model: selectedModel,
-    messages: [
-      { role: 'system', content: TRANSLATE_PROMPT },
-      { role: 'user', content: textToTranslate }
-    ],
-    temperature: 0.7,
-    max_tokens: 2000
-  })
-}
-```
-
-### Available Models
-- Dynamic fetching from local server
-- Optional API key authentication
-
-## Common Translation Prompt
-```javascript
-const TRANSLATE_PROMPT = `あなたは翻訳者です。以下のテキストを日本語に翻訳してください。
-翻訳する際は以下の点に注意してください：
-- 自然で読みやすい日本語にすること
-- 原文の意味を正確に伝えること
-- 文脈に応じて適切な敬語を使うこと
-翻訳結果のみを返してください。説明や注釈は不要です。`;
-```
-
-## Error Response Handling
-- Network errors: "ネットワークエラーが発生しました"
-- API errors: Provider-specific error messages
-- Rate limits: "APIリクエスト制限に達しました"
-- Invalid API key: "APIキーが無効です"
-- Local server not running: Logged as warning (servers may not always be running)
-
-## Validation Methods
-- **OpenRouter**: GET request to `/models` endpoint
-- **Gemini**: GET request to `/models` with API key
-- **Ollama**: GET request to `/api/tags` endpoint
-- **LM Studio**: GET request to `/v1/models` endpoint
-- All validate through background script message handlers
+## Error Handling
+- Exponential backoff for rate limiting (429 status)
+- Retry logic for server errors (5xx status)
+- User-friendly error messages with masked API keys
+- Fallback display via chrome.scripting API when content script unavailable
