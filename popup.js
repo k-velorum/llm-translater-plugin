@@ -144,32 +144,28 @@ function formatModelSelection(model) {
 function updateModelInfo(provider, modelData) {
   const infoElement = document.getElementById(`${provider}-model-info`);
   if (!infoElement || !modelData) return;
-  
-  let infoText = '';
-  
+
+  // 安全にDOMを構築（innerHTMLは使用しない）
+  while (infoElement.firstChild) infoElement.removeChild(infoElement.firstChild);
+
+  const addLine = (text) => {
+    if (!text) return;
+    const div = document.createElement('div');
+    div.textContent = text;
+    infoElement.appendChild(div);
+  };
+
   if (provider === 'openrouter') {
-    infoText = `モデル: ${modelData.name}`;
-    if (modelData.context_length) {
-      infoText += `<br>コンテキスト長: ${modelData.context_length}`;
-    }
-    if (modelData.pricing && modelData.pricing.prompt) {
-      infoText += `<br>入力料金: $${modelData.pricing.prompt} / 1M tokens`;
-    }
-    if (modelData.pricing && modelData.pricing.completion) {
-      infoText += `<br>出力料金: $${modelData.pricing.completion} / 1M tokens`;
-    }
+    addLine(`モデル: ${modelData.name}`);
+    if (modelData.context_length) addLine(`コンテキスト長: ${modelData.context_length}`);
+    if (modelData.pricing && modelData.pricing.prompt) addLine(`入力料金: $${modelData.pricing.prompt} / 1M tokens`);
+    if (modelData.pricing && modelData.pricing.completion) addLine(`出力料金: $${modelData.pricing.completion} / 1M tokens`);
   } else if (provider === 'gemini') {
-    infoText = `モデル: ${modelData.name}`;
-    if (modelData.context_length) {
-      infoText += `<br>入力上限: ${modelData.context_length} tokens`;
-    }
-  } else if (provider === 'ollama') {
-    infoText = `モデル: ${modelData.name || modelData.id}`;
-  } else if (provider === 'lmstudio') {
-    infoText = `モデル: ${modelData.name || modelData.id}`;
+    addLine(`モデル: ${modelData.name}`);
+    if (modelData.context_length) addLine(`入力上限: ${modelData.context_length} tokens`);
+  } else if (provider === 'ollama' || provider === 'lmstudio') {
+    addLine(`モデル: ${modelData.name || modelData.id}`);
   }
-  
-  infoElement.innerHTML = infoText;
 }
 
 // モデル一覧の読み込み
