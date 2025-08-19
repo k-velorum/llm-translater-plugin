@@ -1,8 +1,10 @@
 import { DEFAULT_SETTINGS } from './settings.js';
 
-// 共通プロンプト/ヘッダー
-// ページ全体翻訳で使用する特殊区切りトークン [[[SEP]]] を絶対に変更・翻訳しない旨を明示して安定性を高める
-const TRANSLATE_PROMPT = '指示された文章を日本語に翻訳してください。翻訳結果のみを出力してください。特殊区切りトークン [[[SEP]]] が含まれる場合、それらは絶対に削除・翻訳・変更せず、そのまま出力に保持してください。トークンの数と順序も厳密に維持してください。';
+// 共通プロンプト取得（設定のカスタムがあれば優先）
+function getSystemPrompt(settings) {
+  const v = (settings && settings.translationSystemPrompt) || DEFAULT_SETTINGS.translationSystemPrompt;
+  return (typeof v === 'string' && v.trim().length) ? v : DEFAULT_SETTINGS.translationSystemPrompt;
+}
 const OPENROUTER_HEADERS_BASE = {
   'HTTP-Referer': 'chrome-extension://llm-translator',
   'X-Title': 'LLM Translation Plugin'
@@ -128,7 +130,7 @@ async function translateWithOpenRouter(text, settings) {
   }
 
   const messages = [
-    { role: 'system', content: TRANSLATE_PROMPT },
+    { role: 'system', content: getSystemPrompt(settings) },
     { role: 'user', content: text }
   ];
 
@@ -178,9 +180,7 @@ async function translateWithGemini(text, settings) {
           contents: [
             {
               parts: [
-                {
-                  text: `${TRANSLATE_PROMPT}\n\n${text}`
-                }
+                { text: `${getSystemPrompt(settings)}\n\n${text}` }
               ]
             }
           ],
@@ -209,7 +209,7 @@ async function translateWithOllama(text, settings) {
   }
 
   const apiUrl = `${server}/api/generate`;
-  const prompt = `${TRANSLATE_PROMPT}\n\n${text}`;
+  const prompt = `${getSystemPrompt(settings)}\n\n${text}`;
   try {
     const data = await makeApiRequest(
       apiUrl,
@@ -240,7 +240,7 @@ async function translateWithLmStudio(text, settings) {
 
   const apiUrl = `${server}/v1/chat/completions`;
   const messages = [
-    { role: 'system', content: TRANSLATE_PROMPT },
+    { role: 'system', content: getSystemPrompt(settings) },
     { role: 'user', content: text }
   ];
 

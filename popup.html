@@ -341,6 +341,20 @@
       </div>
     </div>
 
+    <div class="api-section" id="prompt-settings-section">
+      <div class="api-heading">翻訳システムプロンプト</div>
+      <div class="form-group">
+        <label for="translation-system-prompt">プロンプト（system）</label>
+        <textarea id="translation-system-prompt" placeholder="翻訳の方針を記述。空の場合はデフォルトを適用"></textarea>
+        <div style="font-size:12px;color:#666;margin-top:6px;">
+          注: ページ全体翻訳で使用する区切りトークン（既定: <code>[[[SEP]]]</code>）を変える場合、ここに一致する文言を明記してください。
+        </div>
+        <div style="margin-top:6px; display:flex; gap:8px;">
+          <button id="reset-system-prompt" type="button" style="background:#f0f0f0;color:#333;border:1px solid #ccc;width:auto;">デフォルトに戻す</button>
+        </div>
+      </div>
+    </div>
+
     <div class="api-section" id="advanced-settings-section">
       <div class="api-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <span>ページ全体翻訳 詳細設定</span>
